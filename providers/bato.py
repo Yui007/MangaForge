@@ -210,6 +210,9 @@ class BatoProvider(BaseProvider):
                 chapter_number = self._extract_chapter_number(chapter_title)
                 volume = self._extract_volume(chapter_title)
 
+                # Extract release date using the correct Bato selector
+                release_date = self._extract_chapter_date(chapter_element)
+
                 chapter = Chapter(
                     chapter_id=chapter_id,
                     manga_id=manga_id,
@@ -217,7 +220,7 @@ class BatoProvider(BaseProvider):
                     chapter_number=chapter_number,
                     volume=volume,
                     url=chapter_url,
-                    release_date=None,  # Bato doesn't show dates easily
+                    release_date=release_date,
                     language="en"
                 )
                 chapters.append(chapter)
@@ -325,23 +328,29 @@ class BatoProvider(BaseProvider):
         return ""
 
     def _extract_authors(self, soup) -> List[str]:
-        """Extract author information."""
+        """Extract author information using Bato-specific selectors."""
         authors = []
 
-        # Look for author information
-        author_selectors = [
-            '.series-author',
-            '.author',
-            '[itemprop="author"]',
-            'a[href*="author"]'
-        ]
+        # Use the correct Bato selector for authors
+        author_divs = soup.find_all('div', class_='attr-item')
+        for div in author_divs:
+            if div.find('b', class_='text-muted', string='Authors:'):
+                author_links = div.find_all('a')
+                for link in author_links:
+                    author = link.text.strip()
+                    if author and author not in authors:
+                        authors.append(author)
+                break  # Found the authors section, no need to continue
 
-        for selector in author_selectors:
-            author_elements = soup.select(selector)
-            for element in author_elements:
-                author = element.text.strip()
-                if author and author not in authors:
-                    authors.append(author)
+        # Fallback to generic selectors if specific one doesn't work
+        if not authors:
+            author_selectors = ['.series-author', '.author', '[itemprop="author"]', 'a[href*="author"]']
+            for selector in author_selectors:
+                author_elements = soup.select(selector)
+                for element in author_elements:
+                    author = element.text.strip()
+                    if author and author not in authors:
+                        authors.append(author)
 
         return authors
 
@@ -367,35 +376,44 @@ class BatoProvider(BaseProvider):
         return artists
 
     def _extract_genres(self, soup) -> List[str]:
-        """Extract genre information."""
+        """Extract genre information using Bato-specific selectors."""
         genres = []
 
-        # Look for genre information
-        genre_selectors = [
-            '.series-genres',
-            '.genres',
-            '.genre',
-            '[itemprop="genre"]'
-        ]
+        # Use the correct Bato selector for genres
+        genre_divs = soup.find_all('div', class_='attr-item')
+        for div in genre_divs:
+            if div.find('b', class_='text-muted', string='Genres:'):
+                # Extract all text within spans and underlined elements
+                genre_spans = div.find_all(['span', 'u'])
+                for span in genre_spans:
+                    genre = span.text.strip()
+                    if genre and genre not in genres and genre != ',' and genre != 'Genres:':
+                        genres.append(genre)
+                break  # Found the genres section, no need to continue
 
-        for selector in genre_selectors:
-            genre_elements = soup.select(selector)
-            for element in genre_elements:
-                genre = element.text.strip()
-                if genre and genre not in genres:
-                    genres.append(genre)
+        # Fallback to generic selectors if specific one doesn't work
+        if not genres:
+            genre_selectors = ['.series-genres', '.genres', '.genre', '[itemprop="genre"]']
+            for selector in genre_selectors:
+                genre_elements = soup.select(selector)
+                for element in genre_elements:
+                    genre = element.text.strip()
+                    if genre and genre not in genres:
+                        genres.append(genre)
 
         return genres
 
     def _extract_status(self, soup) -> str:
-        """Extract publication status."""
-        # Look for status information
-        status_selectors = [
-            '.series-status',
-            '.status',
-            '.publication-status'
-        ]
+        """Extract publication status using Bato-specific selectors."""
+        # Use the correct Bato selector for "Original work"
+        original_work_element = soup.find('b', class_='text-muted', string='Original work:')
+        if original_work_element:
+            # For Bato, if it shows "Original work", it typically means it's original/completed
+            # This is a heuristic since Bato doesn't always clearly mark status
+            return "Completed"
 
+        # Look for other status indicators
+        status_selectors = ['.series-status', '.status', '.publication-status']
         for selector in status_selectors:
             status_element = soup.select_one(selector)
             if status_element:
@@ -450,6 +468,34 @@ class BatoProvider(BaseProvider):
         match = re.search(r'Vol(?:ume)?\.?\s*(\d+)', chapter_title, re.IGNORECASE)
         if match:
             return match.group(1)
+        return None
+
+    def _extract_chapter_date(self, chapter_element) -> Optional[str]:
+        """Extract chapter release date using Bato-specific selectors."""
+        try:
+            # Look for the parent container that contains the date
+            # The date is in a div with class "extra" containing the timestamp
+            parent_div = chapter_element.find_parent()
+            if parent_div:
+                # Try multiple selectors to find the date
+                date_selectors = [
+                    'div.extra i:last-child',
+                    'div.extra i[class*="ps-3"]',
+                    '.extra i'
+                ]
+
+                for selector in date_selectors:
+                    date_element = parent_div.select_one(selector)
+                    if date_element and 'days ago' in date_element.text:
+                        return date_element.text.strip()
+
+                # Fallback: look for any element containing "days ago"
+                for element in parent_div.find_all(string=lambda text: text and 'days ago' in text):
+                    return element.strip()
+
+        except Exception as e:
+            logger.debug(f"Could not extract date for chapter: {e}")
+
         return None
 
     def _extract_image_urls(self, soup) -> List[str]:

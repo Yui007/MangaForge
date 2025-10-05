@@ -195,7 +195,6 @@ def display_manga_info_card(manga_info: 'MangaInfo') -> None:
         info_table.add_row("Genres:", genres_str)
 
     info_table.add_row("Status:", f"[bold]{manga_info.status}[/bold]")
-    info_table.add_row("Year:", str(manga_info.year) if manga_info.year else "Unknown")
 
     if manga_info.description:
         # Truncate long descriptions

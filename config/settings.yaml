@@ -11,7 +11,7 @@ download:
 output:
   default_format: "cbz"       # images, cbz, pdf
   delete_images_after: true   # Delete images after conversion
-  image_quality: 95           # JPEG quality (1-100)
+  image_quality: 100           # JPEG quality (1-100)
 
 # Provider settings
 providers:

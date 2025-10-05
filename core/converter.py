@@ -149,59 +149,60 @@ class Converter:
 
             # Import here to handle missing dependencies gracefully
             from PIL import Image
-            from reportlab.lib.pagesizes import A4, LETTER
-            from reportlab.platypus import SimpleDocTemplate, Image as RLImage, PageBreak
-            from reportlab.lib.units import inch
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.utils import ImageReader
 
-            # Create PDF document
-            doc = SimpleDocTemplate(str(output_path), pagesize=A4)
-            story = []
+            # Create PDF with first image to determine size
+            first_img = Image.open(image_files[0])
+            img_width, img_height = first_img.size
+            
+            # Use image dimensions directly (ReportLab uses points, 1 point = 1/72 inch)
+            # Add small margin
+            margin = 10
+            page_width = img_width + (2 * margin)
+            page_height = img_height + (2 * margin)
+
+            # Create PDF canvas
+            pdf_canvas = canvas.Canvas(str(output_path), pagesize=(page_width, page_height))
 
             for image_file in image_files:
                 try:
-                    # Open and process image
+                    # Open image
                     img = Image.open(image_file)
-
+                    
                     # Convert to RGB if necessary
-                    if img.mode != 'RGB':
+                    if img.mode not in ('RGB', 'L'):
                         img = img.convert('RGB')
-
-                    # Calculate dimensions to fit A4 page with margins
-                    page_width, page_height = A4
-                    margin = 0.5 * inch
-
-                    # Calculate scaling to fit page
+                    
+                    # Get dimensions
                     img_width, img_height = img.size
-                    available_width = page_width - (2 * margin)
-                    available_height = page_height - (2 * margin)
-
-                    width_ratio = available_width / img_width
-                    height_ratio = available_height / img_height
-                    scale = min(width_ratio, height_ratio)
-
-                    if scale < 1.0:
-                        new_width = img_width * scale
-                        new_height = img_height * scale
-                    else:
-                        new_width = img_width
-                        new_height = img_height
-
-                    # Create reportlab Image object
-                    rl_img = RLImage(image_file)
-                    rl_img.drawWidth = new_width
-                    rl_img.drawHeight = new_height
-
-                    story.append(rl_img)
-                    story.append(PageBreak())
-
-                    logger.debug(f"Added {image_file.name} to PDF")
+                    
+                    # Set page size to match image (with margin)
+                    page_width = img_width + (2 * margin)
+                    page_height = img_height + (2 * margin)
+                    pdf_canvas.setPageSize((page_width, page_height))
+                    
+                    # Draw image centered with margin
+                    pdf_canvas.drawImage(
+                        ImageReader(img),
+                        margin,
+                        margin,
+                        width=img_width,
+                        height=img_height,
+                        preserveAspectRatio=True
+                    )
+                    
+                    # Add new page for next image
+                    pdf_canvas.showPage()
+                    
+                    logger.debug(f"Added {image_file.name} to PDF ({img_width}x{img_height})")
 
                 except Exception as e:
                     logger.warning(f"Failed to process image {image_file}: {e}")
                     continue
 
-            # Build PDF
-            doc.build(story)
+            # Save PDF
+            pdf_canvas.save()
             logger.info(f"Successfully created PDF: {output_path}")
 
             # Clean up images if requested

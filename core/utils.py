@@ -148,7 +148,28 @@ def parse_chapter_range(chapter_range: str, available_chapters: List[Chapter]) -
         return []
 
     selected_chapters = []
-    chapters_by_number = {float(chapter.chapter_number): chapter for chapter in available_chapters}
+
+    # Create a mapping of chapter numbers to chapters, handling special chapters
+    chapters_by_number = {}
+    for chapter in available_chapters:
+        try:
+            # Try to convert to float for regular chapters
+            chapter_num = float(chapter.chapter_number)
+            chapters_by_number[chapter_num] = chapter
+        except ValueError:
+            # Handle special chapters (Extra, Special, etc.)
+            if chapter.chapter_number.lower() in ['extra', 'special', 'bonus']:
+                # Put special chapters at the end with high numbers
+                chapters_by_number[999999.0] = chapter
+            else:
+                # Try to extract numeric part from mixed strings
+                import re
+                match = re.search(r'(\d+(?:\.\d+)?)', chapter.chapter_number)
+                if match:
+                    chapter_num = float(match.group(1))
+                    chapters_by_number[chapter_num] = chapter
+                else:
+                    logger.warning(f"Could not parse chapter number: {chapter.chapter_number}")
 
     # Split by comma to handle multiple ranges
     parts = [part.strip() for part in chapter_range.split(',')]
@@ -180,8 +201,15 @@ def parse_chapter_range(chapter_range: str, available_chapters: List[Chapter]) -
             except ValueError:
                 raise ValueError(f"Invalid chapter number: {part}")
 
-    # Sort by chapter number
-    selected_chapters.sort(key=lambda c: float(c.chapter_number))
+    # Sort by chapter number, putting special chapters at the end
+    def sort_key(chapter):
+        try:
+            return float(chapter.chapter_number)
+        except ValueError:
+            # Special chapters go at the end
+            return 999999.0
+
+    selected_chapters.sort(key=sort_key)
 
     return selected_chapters
 

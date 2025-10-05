@@ -16,7 +16,8 @@ output:
 # Provider settings
 providers:
   enabled:                    # List of enabled provider IDs
-    - mock                     # Only mock for Phase 1
+    - mock                     # Mock provider for testing
+    - bato                     # Bato.to provider
 
   rate_limits:                # Seconds between requests per provider
     default: 1.0

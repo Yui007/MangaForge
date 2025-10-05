@@ -153,7 +153,8 @@ class MangaForgeApp:
 
                 # Display results table
                 from .tables import display_search_results
-                selected = display_search_results(results, current_page)
+                results_per_page = self.config.get('ui.results_per_page', 10)
+                selected = display_search_results(results, current_page, results_per_page)
 
                 if selected == "N" and has_next:
                     current_page += 1
@@ -258,7 +259,7 @@ class MangaForgeApp:
 
             # Chapter selection
             from .menus import select_chapters
-            selected_chapters = select_chapters(all_chapters)
+            selected_chapters = select_chapters(all_chapters, self.config)
 
             if not selected_chapters:
                 console.print("[yellow]No chapters selected.[/yellow]")

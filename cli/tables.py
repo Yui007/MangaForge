@@ -21,25 +21,32 @@ if TYPE_CHECKING:
 console = Console()
 
 
-def display_search_results(results: List[MangaSearchResult], page: int) -> Optional[str]:
+def display_search_results(results: List[MangaSearchResult], page: int, results_per_page: int = 10) -> Optional[str]:
     """
     Display search results in a beautiful table with pagination.
 
     Args:
         results: List of manga search results to display
         page: Current page number
+        results_per_page: Number of results per page
 
     Returns:
         User selection (manga number, N, P, Q)
     """
+    # Calculate pagination
+    total_pages = (len(results) + results_per_page - 1) // results_per_page
+    start_idx = (page - 1) * results_per_page
+    end_idx = min(start_idx + results_per_page, len(results))
+    page_results = results[start_idx:end_idx]
+
     # Create results table
-    table = Table(title=f"Search Results - Page {page}", show_header=True, header_style="bold magenta")
+    table = Table(title=f"Search Results - Page {page}/{total_pages}", show_header=True, header_style="bold magenta")
     table.add_column("#", style="cyan", width=4, justify="center")
     table.add_column("Title", style="white", width=40, max_width=40)
     table.add_column("Provider", style="green", width=12, justify="center")
     table.add_column("URL", style="dim", width=30, max_width=30)
 
-    for i, result in enumerate(results, 1):
+    for i, result in enumerate(page_results, start_idx + 1):
         # Truncate long titles
         title = result.title
         if len(title) > 37:
@@ -63,7 +70,10 @@ def display_search_results(results: List[MangaSearchResult], page: int) -> Optio
 
     # Show navigation options
     console.print("\n[bold cyan]Navigation:[/bold cyan]")
-    console.print("[N] Next Page  [P] Previous Page  [1-10] Select Manga  [Q] Back")
+    if total_pages > 1:
+        console.print(f"[N] Next Page  [P] Previous Page  [1-{len(page_results)}] Select Manga  [Q] Back")
+    else:
+        console.print(f"[1-{len(page_results)}] Select Manga  [Q] Back")
 
     # Get user input
     while True:
@@ -73,15 +83,17 @@ def display_search_results(results: List[MangaSearchResult], page: int) -> Optio
             return choice
         elif choice.isdigit():
             num = int(choice)
-            if 1 <= num <= len(results):
-                return choice
+            if 1 <= num <= len(page_results):
+                # Convert page-relative number to absolute number
+                absolute_num = start_idx + num
+                return str(absolute_num)
             else:
-                console.print(f"[red]Please enter a number between 1 and {len(results)}[/red]")
+                console.print(f"[red]Please enter a number between 1 and {len(page_results)}[/red]")
         else:
             console.print("[red]Invalid choice. Please try again.[/red]")
 
 
-def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int) -> Optional[str]:
+def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int, chapters_per_page: int = 10) -> Optional[str]:
     """
     Display chapters in a beautiful table with pagination.
 
@@ -89,19 +101,22 @@ def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int)
         chapters: List of chapters to display
         page: Current page number
         total_pages: Total number of pages
+        chapters_per_page: Number of chapters per page
 
     Returns:
         User selection (N, P, A, R, S, Q)
     """
+    # Calculate pagination
+    start_idx = (page - 1) * chapters_per_page
+    end_idx = min(start_idx + chapters_per_page, len(chapters))
+    page_chapters = chapters[start_idx:end_idx]
+
     # Create chapters table
     table = Table(title=f"Chapters - Page {page}/{total_pages}", show_header=True, header_style="bold magenta")
     table.add_column("#", style="cyan", width=4, justify="center")
     table.add_column("Chapter", style="white", width=35, max_width=35)
     table.add_column("Volume", style="green", width=8, justify="center")
     table.add_column("Date", style="yellow", width=12, justify="center")
-
-    start_idx = (page - 1) * 10
-    end_idx = min(start_idx + 10, len(chapters))
 
     for i in range(start_idx, end_idx):
         chapter = chapters[i]

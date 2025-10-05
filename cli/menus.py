@@ -34,12 +34,13 @@ def display_manga_info(manga_info: 'MangaInfo') -> None:
     display_manga_info_card(manga_info)
 
 
-def select_chapters(chapters: List['Chapter']) -> List['Chapter']:
+def select_chapters(chapters: List['Chapter'], config: 'Config') -> List['Chapter']:
     """
     Interactive chapter selection with pagination.
 
     Args:
         chapters: List of all available chapters
+        config: Configuration object for pagination settings
 
     Returns:
         List of selected chapters
@@ -51,7 +52,7 @@ def select_chapters(chapters: List['Chapter']) -> List['Chapter']:
     console.print(f"[bold cyan]📚 Total chapters available: {len(chapters)}[/bold cyan]\n")
 
     current_page = 1
-    chapters_per_page = 10
+    chapters_per_page = config.get('ui.chapters_per_page', 10)
     total_pages = (len(chapters) + chapters_per_page - 1) // chapters_per_page
 
     while True:
@@ -61,7 +62,7 @@ def select_chapters(chapters: List['Chapter']) -> List['Chapter']:
         page_chapters = chapters[start_idx:end_idx]
 
         # Display chapters table
-        choice = display_chapters_table(page_chapters, current_page, total_pages)
+        choice = display_chapters_table(page_chapters, current_page, total_pages, chapters_per_page)
 
         if choice == "N" and current_page < total_pages:
             current_page += 1

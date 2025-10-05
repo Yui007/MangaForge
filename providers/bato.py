@@ -186,9 +186,8 @@ class BatoProvider(BaseProvider):
         logger.debug(f"Fetching Bato chapters for: {manga_id}")
 
         try:
-            # Get manga info page first (chapters are on the same page)
-            manga_info = self.get_manga_info(manga_id=manga_id)
-            series_url = manga_info.url
+            # Build series URL directly (no need to call get_manga_info)
+            series_url = f"{self.base_url}/series/{manga_id}"
 
             # Make request to series page
             response = self.session.get(series_url)
@@ -377,19 +376,30 @@ class BatoProvider(BaseProvider):
 
     def _extract_genres(self, soup) -> List[str]:
         """Extract genre information using Bato-specific selectors."""
-        genres = []
+        genre_set = set()
 
         # Use the correct Bato selector for genres
         genre_divs = soup.find_all('div', class_='attr-item')
         for div in genre_divs:
             if div.find('b', class_='text-muted', string='Genres:'):
-                # Extract all text within spans and underlined elements
-                genre_spans = div.find_all(['span', 'u'])
-                for span in genre_spans:
-                    genre = span.text.strip()
-                    if genre and genre not in genres and genre != ',' and genre != 'Genres:':
-                        genres.append(genre)
-                break  # Found the genres section, no need to continue
+                # Only get direct text from span elements, skip nested u tags
+                # Find the container span first
+                container_span = div.find('span')
+                if container_span:
+                    # Get only direct span children (not u tags)
+                    for span in container_span.find_all('span', recursive=False):
+                        genre = span.text.strip()
+                        if genre and genre not in [',', '']:
+                            genre_set.add(genre)
+                    
+                    # Also get text from u tags (they're at the same level)
+                    for u_tag in container_span.find_all('u'):
+                        genre = u_tag.text.strip()
+                        if genre and genre not in [',', '']:
+                            genre_set.add(genre)
+                break
+
+        genres = sorted(list(genre_set))
 
         # Fallback to generic selectors if specific one doesn't work
         if not genres:

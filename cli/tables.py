@@ -130,7 +130,14 @@ def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int,
         volume_display = chapter.volume if chapter.volume else "-"
 
         # Format date
-        date_display = chapter.release_date or "Unknown"
+        if chapter.release_date:
+            # Truncate long dates to fit the column width
+            if len(chapter.release_date) > 12:
+                date_display = chapter.release_date[:9] + "..."
+            else:
+                date_display = chapter.release_date
+        else:
+            date_display = "Unknown"
 
         table.add_row(
             str(i + 1),

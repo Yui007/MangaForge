@@ -362,11 +362,25 @@ class MangaForgeApp:
 
         for i, chapter_path in enumerate(chapter_paths):
             try:
-                if format_type in ["cbz", "both"]:
+                # Handle "both" format carefully to avoid deleting images before PDF conversion
+                if format_type == "both":
+                    # For "both" format: create CBZ first but don't delete images yet
+                    cbz_path = chapter_path.with_suffix('.cbz')
+                    self.converter.to_cbz(chapter_path, cbz_path, delete_images=False)
+
+                    # Create PDF second (images still exist)
+                    pdf_path = chapter_path.with_suffix('.pdf')
+                    self.converter.to_pdf(chapter_path, pdf_path, delete_images=False)
+
+                    # Delete images only after both conversions are complete
+                    if self.config.delete_images_after:
+                        self.converter._cleanup_images(chapter_path, list(chapter_path.iterdir()))
+
+                elif format_type == "cbz":
                     cbz_path = chapter_path.with_suffix('.cbz')
                     self.converter.to_cbz(chapter_path, cbz_path, self.config.delete_images_after)
 
-                if format_type in ["pdf", "both"]:
+                elif format_type == "pdf":
                     pdf_path = chapter_path.with_suffix('.pdf')
                     self.converter.to_pdf(chapter_path, pdf_path, self.config.delete_images_after)
 

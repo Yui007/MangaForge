@@ -84,38 +84,93 @@ class MangaParkProvider(BaseProvider):
         Search for manga on MangaPark.
 
         Note: MangaPark search is limited, so we return has_next=False always.
+        Search doesn't require NSFW mode, so we use a separate browser instance.
         """
-        self._ensure_driver()  # Initialize driver only when search is called
+        # Use separate driver for search (no NSFW needed)
+        driver = None
         try:
-            search_url = f"{self.base_url}/search?word={query}"
+            # Initialize browser WITHOUT NSFW settings for search
+            logger.debug("Initializing browser for search (no NSFW needed)")
+            chrome_options = Options()
+            chrome_options.add_argument("--non-headless")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.page_load_strategy = 'eager'
+
+            driver = webdriver.Chrome(options=chrome_options)
+
+            # Format search URL correctly
+            search_query = query.replace(' ', '%20')
+            search_url = f"{self.base_url}/search?word={search_query}"
             logger.debug(f"Searching MangaPark: {search_url}")
 
-            self.driver.get(search_url)
-            time.sleep(2)
-            
+            driver.get(search_url)
+            time.sleep(5)  # Give more time for search results to load
+
             # Parse with BeautifulSoup
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+
             results = []
-            # Find manga items in search results
-            manga_items = soup.select('div.flex.gap-2')
-            
-            for item in manga_items[:10]:  # Limit to 10 results per page
+            # Find manga items using the correct selector from provided HTML
+            manga_items = soup.select('div.flex.border-b.border-b-base-200.pb-5')
+
+            for item in manga_items[:100]:  # Increased limit for better results
                 try:
-                    link_elem = item.select_one('a[href*="/title/"]')
+                    # Extract manga information using the provided HTML structure
+                    link_elem = item.select_one('h3 a[href*="/title/"]')
                     if not link_elem:
                         continue
-                    
+
                     title = link_elem.get_text(strip=True)
                     href = link_elem.get('href', '')
-                    
+
                     # Extract manga ID from URL
                     manga_id = href.split('/title/')[-1].split('/')[0] if '/title/' in href else ''
-                    
-                    # Get cover image
-                    img_elem = item.select_one('img')
+                    if not manga_id:
+                        continue
+
+                    # Get cover image - look for img tag within the item
+                    img_elem = item.select_one('img.w-full.rounded')
                     cover_url = img_elem.get('src', '') if img_elem else ''
-                    
+
+                    # Get alternative titles
+                    alt_titles_elem = item.select_one('div.text-xs.opacity-80.line-clamp-2')
+                    alternative_titles = []
+                    if alt_titles_elem:
+                        alt_text = alt_titles_elem.get_text(strip=True)
+                        # Split by common separators
+                        for separator in [' / ', '/', ' , ']:
+                            if separator in alt_text:
+                                alternative_titles = [t.strip() for t in alt_text.split(separator) if t.strip()]
+                                break
+
+                    # Get authors
+                    authors_elem = item.select_one('div.text-xs.opacity-80.line-clamp-2:nth-of-type(2)')
+                    authors = []
+                    if authors_elem:
+                        authors_text = authors_elem.get_text(strip=True)
+                        if authors_text:
+                            authors = [a.strip() for a in authors_text.split('/') if a.strip()]
+
+                    # Get genres/tags
+                    genres = []
+                    genres_elem = item.select_one('div.flex.flex-wrap.text-xs.opacity-70')
+                    if genres_elem:
+                        genre_spans = genres_elem.select('span.whitespace-nowrap')
+                        for span in genre_spans:
+                            genre = span.get_text(strip=True)
+                            if genre and genre not in genres:
+                                genres.append(genre)
+
+                    # Get latest chapter info
+                    latest_chapter_elem = item.select_one('div.flex.flex-nowrap.justify-between a')
+                    latest_chapter = ""
+                    if latest_chapter_elem:
+                        latest_chapter = latest_chapter_elem.get_text(strip=True)
+
                     if title and manga_id:
                         results.append(MangaSearchResult(
                             provider_id=self.provider_id,
@@ -124,10 +179,13 @@ class MangaParkProvider(BaseProvider):
                             cover_url=cover_url,
                             url=urljoin(self.base_url, href)
                         ))
+
+                        logger.debug(f"Found: {title} by {', '.join(authors[:2])} - {latest_chapter}")
+
                 except Exception as e:
                     logger.debug(f"Error parsing search result item: {e}")
                     continue
-            
+
             logger.info(f"Found {len(results)} results for '{query}'")
             return results, False  # MangaPark doesn't have clear pagination
 
@@ -135,8 +193,12 @@ class MangaParkProvider(BaseProvider):
             logger.error(f"Search failed: {e}")
             raise
         finally:
-            # Ensure cleanup is called even if an error occurs
-            self.cleanup()
+            # Clean up the search-specific driver
+            if driver:
+                try:
+                    driver.quit()
+                except Exception as e:
+                    logger.debug(f"Error closing search driver: {e}")
     
     def get_manga_info(self, manga_id: Optional[str] = None, url: Optional[str] = None) -> MangaInfo:
         """Get detailed manga information."""

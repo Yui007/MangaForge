@@ -159,8 +159,9 @@ class WeebCentralProvider(BaseProvider):
                     if not chapter_url.startswith(('http://', 'https://')):
                         chapter_url = urljoin(self.base_url, chapter_url)
 
-                    # Extract chapter information
-                    chapter_id = self._extract_chapter_id_from_url(chapter_url)
+                    # For WeebCentral, the chapter URL from the list IS the chapter identifier
+                    # Use the full URL as the chapter_id (following original logic)
+                    chapter_id = chapter_url
                     chapter_number = self._extract_chapter_number(chapter_title)
                     volume = self._extract_volume(chapter_title)
 
@@ -199,7 +200,7 @@ class WeebCentralProvider(BaseProvider):
         Get all image URLs for a chapter from WeebCentral.
 
         Args:
-            chapter_id: WeebCentral chapter ID
+            chapter_id: WeebCentral chapter URL (or ID)
 
         Returns:
             List of direct image URLs in reading order
@@ -207,8 +208,8 @@ class WeebCentralProvider(BaseProvider):
         logger.debug(f"Fetching WeebCentral chapter images for: {chapter_id}")
 
         try:
-            # Build chapter URL
-            chapter_url = f"{self.base_url}/chapter/{chapter_id}"
+            # chapter_id is already the full URL for WeebCentral
+            chapter_url = chapter_id if chapter_id.startswith(('http://', 'https://')) else f"{self.base_url}/chapter/{chapter_id}"
 
             # Use Selenium to get images (WeebCentral uses JavaScript)
             image_urls = self._get_chapter_images_selenium(chapter_url)
@@ -225,50 +226,55 @@ class WeebCentralProvider(BaseProvider):
             raise ProviderError(f"Failed to get chapter images: {e}")
 
     def _get_chapter_images_selenium(self, chapter_url: str) -> List[str]:
-        """Get image URLs using Selenium for JavaScript-heavy pages."""
+        """Get image URLs using Selenium for JavaScript-heavy pages (following original logic)."""
         from selenium import webdriver
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support.ui import WebDriverWait
         import time
 
+        # Use exact same Chrome options as original scraper
         options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
+        options.add_argument('--non-headless')
         options.add_argument('--disable-gpu')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+        # Add preference to disable brotli compression (from original)
         options.add_experimental_option('prefs', {
             'profile.default_content_settings.cookies': 2,
             'profile.managed_default_content_settings.images': 1,
             'profile.default_content_setting_values.notifications': 2
         })
+        # Add header to disable brotli (from original)
         options.add_argument('--accept-encoding=gzip, deflate')
 
         driver = webdriver.Chrome(options=options)
 
         try:
+            logger.info("Loading page with Selenium...")
             driver.get(chapter_url)
-            time.sleep(3)  # Wait for JavaScript to load
+            time.sleep(3)  # Wait for JavaScript to load (exact timing from original)
 
-            # Wait for images to load
+            # Wait for images to load (exact selector from original)
             WebDriverWait(driver, 10).until(
                 lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
             )
 
-            # Get all image elements
+            # Get all image elements (exact logic from original)
             image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
             image_urls = []
 
             for img in image_elements:
                 url = img.get_attribute('src')
                 if url and not url.startswith('data:'):
-                    # Filter out unwanted images
-                    if not any(word in url.lower() for word in ['avatar', 'icon', 'logo', 'banner', 'brand']):
-                        image_urls.append(url)
+                    image_urls.append(url)
 
             logger.info(f"Found {len(image_urls)} images")
             return image_urls
 
+        except Exception as e:
+            logger.error(f"Selenium error: {e}")
+            raise ProviderError(f"Failed to get chapter images: {e}")
         finally:
             driver.quit()
 
@@ -283,10 +289,18 @@ class WeebCentralProvider(BaseProvider):
     def _extract_chapter_id_from_url(self, url: str) -> str:
         """Extract chapter ID from WeebCentral chapter URL."""
         # URL format: https://weebcentral.com/chapter/{chapter_id}
+        # First try to extract from full URL
         match = re.search(r'/chapter/(\d+)', url)
         if match:
             return match.group(1)
-        return url.split('/')[-1]
+
+        # If not found, try to extract from the last part of the URL
+        last_part = url.split('/')[-1]
+        if last_part and last_part != '404':
+            return last_part
+
+        # If still not found, return the original URL as fallback
+        return url
 
     def _extract_title(self, soup) -> str:
         """Extract manga title from series page."""

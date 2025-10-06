@@ -34,12 +34,28 @@ class WeebCentralProvider(BaseProvider):
 
     def search(self, query: str, page: int = 1) -> tuple[List[MangaSearchResult], bool]:
         """
-        Note: WeebCentral doesn't have a search API.
-        This is a placeholder implementation.
+        Search for manga on WeebCentral using the same approach as test.py.
         """
-        # WeebCentral doesn't appear to have a search function
-        # Return empty results with no next page
-        return ([], False)
+        logger.debug(f"Searching WeebCentral for '{query}' on page {page}")
+
+        try:
+            # Use the same URL format as test.py
+            search_url = f"https://weebcentral.com/search?text={query}&sort=Best+Match&order=Descending&official=Any&anime=Any&adult=Any&display_mode=Full+Display"
+            logger.debug(f"Searching WeebCentral: {search_url}")
+
+            # Use Selenium to load the search page (following test.py approach)
+            image_urls = self._get_search_results_selenium(search_url)
+
+            if not image_urls:
+                logger.warning(f"No search results found for '{query}'")
+                return ([], False)
+
+            logger.info(f"Found {len(image_urls)} search results for '{query}'")
+            return (image_urls, False)  # WeebCentral search doesn't have pagination
+
+        except Exception as e:
+            logger.error(f"WeebCentral search failed: {e}")
+            raise ProviderError(f"Search failed: {e}")
 
     def get_manga_info(self, manga_id: Optional[str] = None, url: Optional[str] = None) -> MangaInfo:
         """
@@ -505,6 +521,112 @@ class WeebCentralProvider(BaseProvider):
                     pass
 
         return None
+
+    def _get_search_results_selenium(self, search_url: str) -> List[MangaSearchResult]:
+        """Get search results using Selenium (following test.py approach)."""
+        from selenium import webdriver
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.chrome.options import Options
+        import time
+
+        # Use same Chrome options as test.py but headless for production
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+
+        driver = webdriver.Chrome(options=options)
+
+        try:
+            logger.info(f"Loading search page: {search_url}")
+            driver.get(search_url)
+            time.sleep(3)  # Wait for page to load
+
+            # Wait for search results to appear (same selector as test.py)
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, "section#search-results article"))
+                )
+            except Exception as e:
+                logger.warning(f"No search results appeared in time: {e}")
+                return []
+
+            # Parse HTML after it has rendered
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+
+            results = []
+            # Use same selector as test.py
+            for article in soup.select("section#search-results article.bg-base-300"):
+                try:
+                    # Extract title
+                    title_element = article.select_one("section.hidden a.link")
+                    title = title_element.text.strip() if title_element else None
+
+                    # Extract URL
+                    url_element = article.select_one("a[href]")
+                    url = url_element["href"] if url_element else None
+                    if url and not url.startswith(('http://', 'https://')):
+                        url = urljoin(self.base_url, url)
+
+                    # Extract cover image
+                    img_element = article.select_one("img")
+                    cover_url = img_element["src"] if img_element else None
+                    if cover_url and not cover_url.startswith(('http://', 'https://')):
+                        cover_url = urljoin(self.base_url, cover_url)
+
+                    # Extract manga ID from URL
+                    manga_id = self._extract_manga_id_from_url(url) if url else ""
+
+                    # Extract additional info
+                    info = {}
+                    for div in article.select("section.hidden div.opacity-70"):
+                        strong = div.find("strong")
+                        span = div.find("span")
+                        if strong and span:
+                            key = strong.text.strip(":").lower()
+                            info[key] = span.text.strip()
+
+                    # Extract authors
+                    authors = [a.text.strip() for a in article.select("section.hidden a[href*='author=']")]
+
+                    # Extract tags/genres
+                    tags = []
+                    for span in article.select("section.hidden div strong:contains('Tag') ~ span"):
+                        tag = span.text.strip(",")
+                        if tag:
+                            tags.append(tag)
+
+                    # Check if it's official
+                    is_official = "Official" in article.text
+
+                    # Create search result
+                    if title and url:
+                        result = MangaSearchResult(
+                            provider_id=self.provider_id,
+                            manga_id=manga_id,
+                            title=title,
+                            cover_url=cover_url or "",
+                            url=url
+                        )
+                        results.append(result)
+
+                        logger.debug(f"Found search result: {title}")
+
+                except Exception as e:
+                    logger.debug(f"Error parsing search result: {e}")
+                    continue
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Selenium search error: {e}")
+            raise ProviderError(f"Search failed: {e}")
+        finally:
+            driver.quit()
 
     def _extract_cover_url(self, soup) -> str:
         """Extract cover image URL using WeebCentral-specific selectors."""

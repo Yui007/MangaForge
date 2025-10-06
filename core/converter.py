@@ -167,34 +167,34 @@ class Converter:
 
             for image_file in image_files:
                 try:
-                    # Open image
-                    img = Image.open(image_file)
-                    
-                    # Convert to RGB if necessary
-                    if img.mode not in ('RGB', 'L'):
-                        img = img.convert('RGB')
-                    
-                    # Get dimensions
-                    img_width, img_height = img.size
-                    
-                    # Set page size to match image (with margin)
-                    page_width = img_width + (2 * margin)
-                    page_height = img_height + (2 * margin)
-                    pdf_canvas.setPageSize((page_width, page_height))
-                    
-                    # Draw image centered with margin
-                    pdf_canvas.drawImage(
-                        ImageReader(img),
-                        margin,
-                        margin,
-                        width=img_width,
-                        height=img_height,
-                        preserveAspectRatio=True
-                    )
-                    
-                    # Add new page for next image
+                    # Read image data into memory first with proper file handle management
+                    with Image.open(image_file) as img:
+                        # Convert to RGB if necessary
+                        if img.mode not in ('RGB', 'L'):
+                            img = img.convert('RGB')
+
+                        # Get dimensions
+                        img_width, img_height = img.size
+
+                        # Set page size to match image (with margin)
+                        page_width = img_width + (2 * margin)
+                        page_height = img_height + (2 * margin)
+                        pdf_canvas.setPageSize((page_width, page_height))
+
+                        # Use string path instead of ImageReader with PIL object
+                        # This lets ReportLab handle file opening/closing internally
+                        pdf_canvas.drawImage(
+                            str(image_file),  # Use path string directly
+                            margin,
+                            margin,
+                            width=img_width,
+                            height=img_height,
+                            preserveAspectRatio=True
+                        )
+
+                    # File is now closed due to 'with' statement
                     pdf_canvas.showPage()
-                    
+
                     logger.debug(f"Added {image_file.name} to PDF ({img_width}x{img_height})")
 
                 except Exception as e:
@@ -205,7 +205,7 @@ class Converter:
             pdf_canvas.save()
             logger.info(f"Successfully created PDF: {output_path}")
 
-            # Clean up images if requested
+            # Clean up images if requested (file handles should now be properly released)
             if delete_images:
                 Converter._cleanup_images(image_dir, image_files)
                 logger.info(f"Cleaned up source images from {image_dir}")
@@ -222,19 +222,11 @@ class Converter:
     def _cleanup_images(image_dir: Path, image_files: List[Path]):
         """Clean up image files after conversion."""
         try:
-            for image_file in image_files:
-                if image_file.exists():
-                    image_file.unlink()
-                    logger.debug(f"Deleted {image_file}")
-
-            # Try to remove the directory if it's empty
-            try:
-                if not any(image_dir.iterdir()):
-                    image_dir.rmdir()
-                    logger.debug(f"Removed empty directory {image_dir}")
-            except OSError:
-                # Directory not empty or other error, ignore
-                pass
+            # Use the same approach as the original scraper: remove entire directory
+            # This is much more reliable than trying to delete individual files
+            if image_dir.exists():
+                shutil.rmtree(image_dir, ignore_errors=True)
+                logger.info(f"Cleaned up source images from {image_dir}")
 
         except Exception as e:
             logger.warning(f"Failed to cleanup images: {e}")

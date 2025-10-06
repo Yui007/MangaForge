@@ -234,12 +234,13 @@ class WeebCentralProvider(BaseProvider):
 
         # Use exact same Chrome options as original scraper
         options = webdriver.ChromeOptions()
-        options.add_argument('--non-headless')
+        options.add_argument('--headless')
         options.add_argument('--disable-gpu')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument(f'user-agent={self.headers["User-Agent"]}')
         # Add preference to disable brotli compression (from original)
+        
         options.add_experimental_option('prefs', {
             'profile.default_content_settings.cookies': 2,
             'profile.managed_default_content_settings.images': 1,

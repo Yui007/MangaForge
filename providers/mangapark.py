@@ -265,19 +265,21 @@ class MangaParkProvider(BaseProvider):
             # Parse HTML
             soup = self._parse_html(response.text)
 
-            # Extract chapters using the exact selector from the working script
+            # Extract chapters using the exact selector from the working HTML structure
             chapters = []
             chapter_elements = soup.select('a.link-hover.link-primary.visited\\:text-accent')
 
             if not chapter_elements:
                 logger.warning("No chapter elements found with primary selector, trying fallback selectors")
-                # Fallback selectors from the original script
+                # Fallback selectors from the original script and HTML structure
                 selectors_to_try = [
                     'a[href*="/title/"][href*="/chapter"]',
                     'a[href*="/c"]',
                     '.chapter-list a',
                     '[data-mal-sync-episode] a',
-                    'a[href*="chapter"]'
+                    'a[href*="chapter"]',
+                    'a.visited\\:text-accent',
+                    'a.link-primary'
                 ]
 
                 for selector in selectors_to_try:
@@ -430,15 +432,13 @@ class MangaParkProvider(BaseProvider):
 
     def _extract_title(self, soup) -> str:
         """Extract manga title from manga page."""
-        # Try multiple selectors for title - use selectors that work with MangaPark
+        # Use the exact selector from the working HTML structure
         title_selectors = [
+            'a.link.link-hover',
+            '.link.link-hover',
             'h1.font-bold',
             'h1.text-2xl',
-            'h1',
-            '.series-title',
-            '.manga-title',
-            '.text-2xl.font-bold',
-            '.font-bold.text-2xl'
+            'h1'
         ]
 
         for selector in title_selectors:
@@ -455,7 +455,12 @@ class MangaParkProvider(BaseProvider):
 
     def _extract_description(self, soup) -> str:
         """Extract manga description."""
-        # Look for description in various possible locations
+        # Use the exact selector from the working HTML structure
+        desc_element = soup.select_one('div.limit-html-p')
+        if desc_element:
+            return desc_element.text.strip()
+
+        # Fallback to generic selectors if specific one doesn't work
         desc_selectors = [
             '.series-summary',
             '.summary',
@@ -516,31 +521,59 @@ class MangaParkProvider(BaseProvider):
         """Extract genre information."""
         genres = []
 
-        # Look for genre information
-        genre_selectors = [
-            '.series-genres',
-            '.genres',
-            '.genre',
-            '[itemprop="genre"]',
-            '.badge'
-        ]
+        # Use the exact selector from the working HTML structure
+        genre_container = soup.select_one('div.flex.items-center.flex-wrap')
+        if genre_container:
+            # Find the "Genres:" label and extract all genre spans after it
+            genres_label = genre_container.find('b', string=re.compile(r'Genres?:', re.IGNORECASE))
+            if genres_label:
+                # Get all span elements that contain genre text
+                for span in genre_container.select('span.whitespace-nowrap'):
+                    genre = span.text.strip()
+                    if genre and genre not in [',', ''] and genre not in genres:
+                        genres.append(genre)
 
-        for selector in genre_selectors:
-            genre_elements = soup.select(selector)
-            for element in genre_elements:
-                genre = element.text.strip()
-                if genre and genre not in genres:
-                    genres.append(genre)
+        # Fallback to generic selectors if specific one doesn't work
+        if not genres:
+            genre_selectors = [
+                '.series-genres',
+                '.genres',
+                '.genre',
+                '[itemprop="genre"]',
+                '.badge'
+            ]
+
+            for selector in genre_selectors:
+                genre_elements = soup.select(selector)
+                for element in genre_elements:
+                    genre = element.text.strip()
+                    if genre and genre not in genres:
+                        genres.append(genre)
 
         return genres
 
     def _extract_status(self, soup) -> str:
         """Extract publication status."""
-        # Look for status indicators
+        # Use BeautifulSoup's find method with a function to find the q:key attribute
+        status_container = soup.find('div', attrs={'q:key': 'Yn_8'})
+        if status_container:
+            status_span = status_container.find('span', class_='font-bold uppercase')
+            if status_span:
+                status = status_span.text.strip().lower()
+                if "ongoing" in status:
+                    return "Ongoing"
+                elif "completed" in status:
+                    return "Completed"
+                elif "hiatus" in status:
+                    return "Hiatus"
+
+        # Fallback to generic selectors if specific one doesn't work
         status_selectors = [
             '.series-status',
             '.status',
-            '.publication-status'
+            '.publication-status',
+            '.text-success',
+            '.font-bold.uppercase'
         ]
 
         for selector in status_selectors:

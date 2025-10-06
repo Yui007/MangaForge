@@ -81,124 +81,131 @@ class MangaParkProvider(BaseProvider):
     
     def search(self, query: str, page: int = 1) -> tuple[List[MangaSearchResult], bool]:
         """
-        Search for manga on MangaPark.
+        Search for manga on MangaPark using HTTP requests and BeautifulSoup.
 
-        Note: MangaPark search is limited, so we return has_next=False always.
-        Search doesn't require NSFW mode, so we use a separate browser instance.
+        This is much faster and more efficient than using Selenium for search.
         """
-        # Use separate driver for search (no NSFW needed)
-        driver = None
+        logger.debug(f"Searching MangaPark for '{query}' on page {page}")
+
         try:
-            # Initialize browser WITHOUT NSFW settings for search
-            logger.debug("Initializing browser for search (no NSFW needed)")
-            chrome_options = Options()
-            chrome_options.add_argument("--non-headless")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--disable-web-security")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.page_load_strategy = 'eager'
-
-            driver = webdriver.Chrome(options=chrome_options)
-
-            # Format search URL correctly
+            # Format search URL correctly with page parameter
             search_query = query.replace(' ', '%20')
-            search_url = f"{self.base_url}/search?word={search_query}"
-            logger.debug(f"Searching MangaPark: {search_url}")
+            if page > 1:
+                search_url = f"{self.base_url}/search?word={search_query}&page={page}"
+            else:
+                search_url = f"{self.base_url}/search?word={search_query}"
 
-            driver.get(search_url)
-            time.sleep(5)  # Give more time for search results to load
+            logger.debug(f"Search URL: {search_url}")
 
-            # Parse with BeautifulSoup
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            # Use proper headers like in test.py
+            headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                )
+            }
+
+            # Make HTTP request
+            response = self.session.get(search_url, headers=headers)
+            response.raise_for_status()
+
+            # Parse HTML with BeautifulSoup
+            soup = BeautifulSoup(response.text, 'html.parser')
 
             results = []
-            # Find manga items using the correct selector from provided HTML
-            manga_items = soup.select('div.flex.border-b.border-b-base-200.pb-5')
 
-            for item in manga_items[:100]:  # Increased limit for better results
+            # Use the working selector from test.py
+            manga_items = soup.select("div.grid > div.flex.border-b")
+
+            for item in manga_items[:20]:  # Reasonable limit for search results
                 try:
-                    # Extract manga information using the provided HTML structure
-                    link_elem = item.select_one('h3 a[href*="/title/"]')
-                    if not link_elem:
+                    # Extract title and URL
+                    title_tag = item.select_one("h3 a")
+                    if not title_tag:
                         continue
 
-                    title = link_elem.get_text(strip=True)
-                    href = link_elem.get('href', '')
+                    title = title_tag.get_text(strip=True)
+                    href = title_tag.get('href', '')
+                    manga_url = urljoin(self.base_url, href)
 
                     # Extract manga ID from URL
                     manga_id = href.split('/title/')[-1].split('/')[0] if '/title/' in href else ''
-                    if not manga_id:
+                    if not manga_id or not title:
                         continue
 
-                    # Get cover image - look for img tag within the item
-                    img_elem = item.select_one('img.w-full.rounded')
-                    cover_url = img_elem.get('src', '') if img_elem else ''
+                    # Extract thumbnail
+                    img_tag = item.select_one("img")
+                    cover_url = urljoin(self.base_url, img_tag.get('src', '')) if img_tag else ''
 
-                    # Get alternative titles
-                    alt_titles_elem = item.select_one('div.text-xs.opacity-80.line-clamp-2')
-                    alternative_titles = []
-                    if alt_titles_elem:
-                        alt_text = alt_titles_elem.get_text(strip=True)
-                        # Split by common separators
-                        for separator in [' / ', '/', ' , ']:
-                            if separator in alt_text:
-                                alternative_titles = [t.strip() for t in alt_text.split(separator) if t.strip()]
-                                break
+                    # Extract alternative titles
+                    alt_titles = []
+                    info_blocks = item.select("div.text-xs.opacity-80.line-clamp-2")
+                    if len(info_blocks) >= 1:
+                        alt_titles = [
+                            span.get_text(strip=True)
+                            for span in info_blocks[0].select("span")
+                            if span.get_text(strip=True)
+                        ]
 
-                    # Get authors
-                    authors_elem = item.select_one('div.text-xs.opacity-80.line-clamp-2:nth-of-type(2)')
+                    # Extract authors
                     authors = []
-                    if authors_elem:
-                        authors_text = authors_elem.get_text(strip=True)
-                        if authors_text:
-                            authors = [a.strip() for a in authors_text.split('/') if a.strip()]
+                    if len(info_blocks) >= 2:
+                        authors = [
+                            a.get_text(strip=True)
+                            for a in info_blocks[1].select("span")
+                            if a.get_text(strip=True)
+                        ]
 
-                    # Get genres/tags
-                    genres = []
-                    genres_elem = item.select_one('div.flex.flex-wrap.text-xs.opacity-70')
-                    if genres_elem:
-                        genre_spans = genres_elem.select('span.whitespace-nowrap')
-                        for span in genre_spans:
-                            genre = span.get_text(strip=True)
-                            if genre and genre not in genres:
-                                genres.append(genre)
+                    # Extract rating
+                    rating_tag = item.select_one("span.font-bold")
+                    rating = rating_tag.get_text(strip=True) if rating_tag else ""
 
-                    # Get latest chapter info
-                    latest_chapter_elem = item.select_one('div.flex.flex-nowrap.justify-between a')
-                    latest_chapter = ""
-                    if latest_chapter_elem:
-                        latest_chapter = latest_chapter_elem.get_text(strip=True)
+                    # Extract followers
+                    follow_tag = item.select_one("div[id^='comic-follow-swap-'] span.ml-1")
+                    followers = follow_tag.get_text(strip=True) if follow_tag else ""
 
-                    if title and manga_id:
-                        results.append(MangaSearchResult(
-                            provider_id=self.provider_id,
-                            manga_id=manga_id,
-                            title=title,
-                            cover_url=cover_url,
-                            url=urljoin(self.base_url, href)
-                        ))
+                    # Extract genres
+                    genres = [
+                        g.get_text(strip=True)
+                        for g in item.select("div.flex.flex-wrap.text-xs.opacity-70 span.whitespace-nowrap")
+                    ]
 
-                        logger.debug(f"Found: {title} by {', '.join(authors[:2])} - {latest_chapter}")
+                    # Extract latest chapter info
+                    chapter_tag = item.select_one("a.link-hover.link-primary")
+                    latest_chapter = chapter_tag.get_text(strip=True) if chapter_tag else ""
+                    latest_chapter_url = urljoin(self.base_url, chapter_tag.get('href', '')) if chapter_tag else ""
+
+                    # Extract update time
+                    time_tag = item.select_one("time span")
+                    updated = time_tag.get_text(strip=True) if time_tag else ""
+
+                    # Create search result
+                    result = MangaSearchResult(
+                        provider_id=self.provider_id,
+                        manga_id=manga_id,
+                        title=title,
+                        cover_url=cover_url,
+                        url=manga_url
+                    )
+
+                    results.append(result)
+
+                    logger.debug(f"Found: {title} | Rating: {rating} | Followers: {followers}")
 
                 except Exception as e:
                     logger.debug(f"Error parsing search result item: {e}")
                     continue
 
-            logger.info(f"Found {len(results)} results for '{query}'")
-            return results, False  # MangaPark doesn't have clear pagination
+            # Check for pagination
+            has_next = self._has_next_page(soup, page)
+
+            logger.info(f"Found {len(results)} results for '{query}' on page {page}")
+            return results, has_next
 
         except Exception as e:
             logger.error(f"Search failed: {e}")
             raise
-        finally:
-            # Clean up the search-specific driver
-            if driver:
-                try:
-                    driver.quit()
-                except Exception as e:
-                    logger.debug(f"Error closing search driver: {e}")
     
     def get_manga_info(self, manga_id: Optional[str] = None, url: Optional[str] = None) -> MangaInfo:
         """Get detailed manga information."""
@@ -426,6 +433,48 @@ class MangaParkProvider(BaseProvider):
                 self.driver = None
             except Exception as e:
                 logger.debug(f"Error closing driver: {e}")
+
+    def _has_next_page(self, soup, current_page: int) -> bool:
+        """Check if there's a next page in MangaPark search results."""
+        try:
+            # Use the working selector from test.py to count actual results
+            manga_items = soup.select("div.grid > div.flex.border-b")
+            total_results_on_page = len(manga_items)
+
+            # If we got 20 results (our limit), there might be more pages
+            if total_results_on_page >= 20:
+                return True
+
+            # Look for pagination elements - check for page links
+            pagination_selectors = [
+                'a[href*="page"]',  # Links with page parameter
+                '.pagination a',    # Pagination container links
+                'nav a[href*="search"]'  # Navigation links back to search
+            ]
+
+            for selector in pagination_selectors:
+                elements = soup.select(selector)
+                for elem in elements:
+                    href = elem.get('href', '')
+                    if href and 'page=' in href:
+                        # Check if there's a page number higher than current
+                        try:
+                            next_page = int(href.split('page=')[-1].split('&')[0])
+                            if next_page > current_page:
+                                return True
+                        except (ValueError, IndexError):
+                            continue
+
+            # Check for "Next" text in buttons or links
+            next_text_elements = soup.find_all(string=lambda text: text and 'next' in text.lower())
+            if next_text_elements:
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.debug(f"Error checking for next page: {e}")
+            return False
 
     def __del__(self):
         """Clean up Selenium driver."""

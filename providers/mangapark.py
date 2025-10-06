@@ -3,7 +3,7 @@ MangaPark Provider for MangaForge.
 
 This provider uses Selenium to scrape MangaPark with NSFW mode permanently enabled.
 """
-from typing import List, Optional
+from typing import List, Optional, Union
 import time
 from urllib.parse import urljoin
 
@@ -12,6 +12,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.remote.webdriver import WebDriver
 from bs4 import BeautifulSoup
 
 from core.base_provider import BaseProvider
@@ -29,10 +30,10 @@ class MangaParkProvider(BaseProvider):
     base_url = "https://mangapark.net"
     requires_browser = True
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the provider with HTTP session and Selenium setup."""
         super().__init__()  # Initialize HTTP session from BaseProvider
-        self.driver = None  # Don't initialize Selenium yet
+        self.driver: Optional[WebDriver] = None  # Don't initialize Selenium yet
     
     def _initialize_driver_with_nsfw(self):
         """Initialize Chrome driver and enable NSFW settings permanently."""
@@ -137,7 +138,7 @@ class MangaParkProvider(BaseProvider):
             # Ensure cleanup is called even if an error occurs
             self.cleanup()
     
-    def get_manga_info(self, manga_id: str = None, url: str = None) -> MangaInfo:
+    def get_manga_info(self, manga_id: Optional[str] = None, url: Optional[str] = None) -> MangaInfo:
         """Get detailed manga information."""
         self._ensure_driver()  # Initialize driver only when needed
         try:

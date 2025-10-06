@@ -16,10 +16,14 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from bs4 import BeautifulSoup
 
 from core.base_provider import BaseProvider
+from core.config import Config
 from models import MangaSearchResult, MangaInfo, Chapter
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Global config instance
+_config = Config()
 
 
 class MangaParkProvider(BaseProvider):
@@ -88,26 +92,17 @@ class MangaParkProvider(BaseProvider):
         logger.debug(f"Searching MangaPark for '{query}' on page {page}")
 
         try:
-            # Format search URL correctly with page parameter
-            search_query = query.replace(' ', '%20')
-            if page > 1:
-                search_url = f"{self.base_url}/search?word={search_query}&page={page}"
-            else:
-                search_url = f"{self.base_url}/search?word={search_query}"
-
-            logger.debug(f"Search URL: {search_url}")
-
-            # Use proper headers like in test.py
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                )
+            # Build search URL and params like Bato provider
+            search_url = f"{self.base_url}/search"
+            params = {
+                'word': query,
+                'page': page
             }
 
-            # Make HTTP request
-            response = self.session.get(search_url, headers=headers)
+            logger.debug(f"Searching MangaPark: {search_url} with params: {params}")
+
+            # Make request with params (like Bato provider)
+            response = self.session.get(search_url, params=params)
             response.raise_for_status()
 
             # Parse HTML with BeautifulSoup
@@ -118,7 +113,10 @@ class MangaParkProvider(BaseProvider):
             # Use the working selector from test.py
             manga_items = soup.select("div.grid > div.flex.border-b")
 
-            for item in manga_items[:20]:  # Reasonable limit for search results
+            # Get results limit from config (default to 20 if not found)
+            results_limit = _config.get('ui.results_per_page', 20)
+
+            for item in manga_items[:results_limit]:
                 try:
                     # Extract title and URL
                     title_tag = item.select_one("h3 a")
@@ -436,45 +434,32 @@ class MangaParkProvider(BaseProvider):
 
     def _has_next_page(self, soup, current_page: int) -> bool:
         """Check if there's a next page in MangaPark search results."""
-        try:
-            # Use the working selector from test.py to count actual results
-            manga_items = soup.select("div.grid > div.flex.border-b")
-            total_results_on_page = len(manga_items)
+        # Use the correct MangaPark pagination selector from provided HTML
+        pagination_container = soup.select_one('.flex.items-center.flex-wrap.space-x-1.my-10.justify-center')
 
-            # If we got 20 results (our limit), there might be more pages
-            if total_results_on_page >= 20:
-                return True
+        if pagination_container:
+            # Look for page links within the pagination container
+            page_links = pagination_container.select('a[href*="page"]')
 
-            # Look for pagination elements - check for page links
-            pagination_selectors = [
-                'a[href*="page"]',  # Links with page parameter
-                '.pagination a',    # Pagination container links
-                'nav a[href*="search"]'  # Navigation links back to search
-            ]
+            for link in page_links:
+                href = link.get('href', '')
+                if href and 'page=' in href:
+                    try:
+                        # Extract page number from href
+                        page_num = int(href.split('page=')[-1].split('&')[0])
+                        if page_num > current_page:
+                            return True
+                    except (ValueError, IndexError):
+                        continue
 
-            for selector in pagination_selectors:
-                elements = soup.select(selector)
-                for elem in elements:
-                    href = elem.get('href', '')
-                    if href and 'page=' in href:
-                        # Check if there's a page number higher than current
-                        try:
-                            next_page = int(href.split('page=')[-1].split('&')[0])
-                            if next_page > current_page:
-                                return True
-                        except (ValueError, IndexError):
-                            continue
+        # Fallback: Check if current page has results (if no results, likely no next page)
+        result_items = soup.select("div.grid > div.flex.border-b")
+        if len(result_items) > 0:
+            # If we got a full page of results, there might be more pages
+            results_limit = _config.get('ui.results_per_page', 20)
+            return len(result_items) >= results_limit
 
-            # Check for "Next" text in buttons or links
-            next_text_elements = soup.find_all(string=lambda text: text and 'next' in text.lower())
-            if next_text_elements:
-                return True
-
-            return False
-
-        except Exception as e:
-            logger.debug(f"Error checking for next page: {e}")
-            return False
+        return False
 
     def __del__(self):
         """Clean up Selenium driver."""

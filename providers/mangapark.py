@@ -128,10 +128,13 @@ class MangaParkProvider(BaseProvider):
             
             logger.info(f"Found {len(results)} results for '{query}'")
             return results, False  # MangaPark doesn't have clear pagination
-            
+
         except Exception as e:
             logger.error(f"Search failed: {e}")
             raise
+        finally:
+            # Ensure cleanup is called even if an error occurs
+            self.cleanup()
     
     def get_manga_info(self, manga_id: str = None, url: str = None) -> MangaInfo:
         """Get detailed manga information."""
@@ -201,7 +204,7 @@ class MangaParkProvider(BaseProvider):
                 status=status,
                 year=None
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get manga info: {e}")
             raise
@@ -286,53 +289,85 @@ class MangaParkProvider(BaseProvider):
             
             logger.info(f"Found {len(chapters)} chapters")
             return chapters
-            
+
         except Exception as e:
             logger.error(f"Failed to get chapters: {e}")
             raise
+        finally:
+            # Ensure cleanup is called even if an error occurs
+            self.cleanup()
     
     def get_chapter_images(self, chapter_id: str) -> List[str]:
         """Get all image URLs for a chapter."""
+        # For chapter downloads, we don't need NSFW mode - use separate browser instance
+        driver = None
         try:
-            # Construct chapter URL - chapter_id is already the full URL from get_chapters
-            chapter_url = chapter_id if chapter_id.startswith('http') else f"{self.base_url}/chapter/{chapter_id}"
-            
+            # Initialize browser WITHOUT NSFW settings for downloads
+            logger.debug("Initializing browser for chapter download (no NSFW needed)")
+            chrome_options = Options()
+            chrome_options.add_argument("--non-headless")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.page_load_strategy = 'eager'
+
+            driver = webdriver.Chrome(options=chrome_options)
+
+            # Construct chapter URL properly
+            base_url = "https://mangapark.net"
+            chapter_url = urljoin(base_url, chapter_id) if not chapter_id.startswith('http') else chapter_id
+
             logger.debug(f"Fetching chapter images: {chapter_url}")
-            self.driver.get(chapter_url)
+            driver.get(chapter_url)
             time.sleep(5)
-            
+
             # Wait for images to load
             try:
-                WebDriverWait(self.driver, 20).until(
+                WebDriverWait(driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "img.w-full.h-full"))
                 )
             except Exception as e:
                 logger.warning(f"Timeout waiting for images: {e}")
-            
-            # Find image elements
-            image_elements = self.driver.find_elements(By.CSS_SELECTOR, "img.w-full.h-full")
-            
+
+            # Find image elements - use same logic as port file
+            image_elements = driver.find_elements(By.CSS_SELECTOR, "img.w-full.h-full")
+
             if not image_elements:
                 # Try alternative selector
-                image_elements = self.driver.find_elements(By.CSS_SELECTOR, "main img")
-            
+                image_elements = driver.find_elements(By.CSS_SELECTOR, "main img")
+
             image_urls = []
             for img in image_elements:
                 img_url = img.get_attribute('src')
                 if img_url and img_url.startswith('http'):
                     image_urls.append(img_url)
-            
+
             logger.info(f"Found {len(image_urls)} images")
             return image_urls
-            
+
         except Exception as e:
             logger.error(f"Failed to get chapter images: {e}")
             raise
+        finally:
+            # Clean up the download-specific driver
+            if driver:
+                try:
+                    driver.quit()
+                except Exception as e:
+                    logger.debug(f"Error closing download driver: {e}")
     
-    def __del__(self):
+    def cleanup(self):
         """Clean up Selenium driver."""
         if self.driver:
             try:
+                logger.info("Closing MangaPark browser driver")
                 self.driver.quit()
+                self.driver = None
             except Exception as e:
                 logger.debug(f"Error closing driver: {e}")
+
+    def __del__(self):
+        """Clean up Selenium driver."""
+        self.cleanup()

@@ -154,7 +154,7 @@ class MangaForgeApp:
                 # Display results table
                 from .tables import display_search_results
                 results_per_page = self.config.get('ui.results_per_page', 10)
-                selected = display_search_results(results, current_page, results_per_page)
+                selected = display_search_results(results, current_page, results_per_page, has_next)
 
                 if selected == "N" and has_next:
                     current_page += 1

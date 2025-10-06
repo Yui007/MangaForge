@@ -434,32 +434,12 @@ class MangaParkProvider(BaseProvider):
 
     def _has_next_page(self, soup, current_page: int) -> bool:
         """Check if there's a next page in MangaPark search results."""
-        # Use the correct MangaPark pagination selector from provided HTML
-        pagination_container = soup.select_one('.flex.items-center.flex-wrap.space-x-1.my-10.justify-center')
+        # Simple approach: Check if current page has any results
+        # If it has results, assume there's likely a next page
+        # The calling code will handle incrementing page numbers and checking for empty results
 
-        if pagination_container:
-            # Look for page links within the pagination container
-            page_links = pagination_container.select('a[href*="page"]')
-
-            for link in page_links:
-                href = link.get('href', '')
-                if href and 'page=' in href:
-                    try:
-                        # Extract page number from href
-                        page_num = int(href.split('page=')[-1].split('&')[0])
-                        if page_num > current_page:
-                            return True
-                    except (ValueError, IndexError):
-                        continue
-
-        # Fallback: Check if current page has results (if no results, likely no next page)
         result_items = soup.select("div.grid > div.flex.border-b")
-        if len(result_items) > 0:
-            # If we got a full page of results, there might be more pages
-            results_limit = _config.get('ui.results_per_page', 20)
-            return len(result_items) >= results_limit
-
-        return False
+        return len(result_items) > 0
 
     def __del__(self):
         """Clean up Selenium driver."""

@@ -21,23 +21,27 @@ if TYPE_CHECKING:
 console = Console()
 
 
-def display_search_results(results: List[MangaSearchResult], page: int, results_per_page: int = 10) -> Optional[str]:
+def display_search_results(results: List[MangaSearchResult], page: int, results_per_page: int = 10, has_next: bool = False) -> Optional[str]:
     """
     Display search results in a beautiful table with pagination.
 
     Args:
-        results: List of manga search results to display
+        results: List of manga search results to display (current page only)
         page: Current page number
         results_per_page: Number of results per page
+        has_next: Whether there are more pages available
 
     Returns:
         User selection (manga number, N, P, Q)
     """
-    # Calculate pagination
-    total_pages = (len(results) + results_per_page - 1) // results_per_page
-    start_idx = (page - 1) * results_per_page
-    end_idx = min(start_idx + results_per_page, len(results))
-    page_results = results[start_idx:end_idx]
+    # For pagination display, show current page and indicate if more pages exist
+    if has_next:
+        total_pages = f"{page}+"
+    else:
+        total_pages = str(page)
+
+    # Since results contains only current page results, start from index 0
+    page_results = results[:results_per_page]
 
     # Create results table
     table = Table(title=f"Search Results - Page {page}/{total_pages}", show_header=True, header_style="bold magenta")
@@ -46,7 +50,7 @@ def display_search_results(results: List[MangaSearchResult], page: int, results_
     table.add_column("Provider", style="green", width=12, justify="center")
     table.add_column("URL", style="dim", width=30, max_width=30)
 
-    for i, result in enumerate(page_results, start_idx + 1):
+    for i, result in enumerate(page_results, 1):
         # Truncate long titles
         title = result.title
         if len(title) > 37:
@@ -70,7 +74,7 @@ def display_search_results(results: List[MangaSearchResult], page: int, results_
 
     # Show navigation options
     console.print("\n[bold cyan]Navigation:[/bold cyan]")
-    if total_pages > 1:
+    if has_next or page > 1:
         console.print(f"[N] Next Page  [P] Previous Page  [1-{len(page_results)}] Select Manga  [Q] Back")
     else:
         console.print(f"[1-{len(page_results)}] Select Manga  [Q] Back")
@@ -84,9 +88,8 @@ def display_search_results(results: List[MangaSearchResult], page: int, results_
         elif choice.isdigit():
             num = int(choice)
             if 1 <= num <= len(page_results):
-                # Convert page-relative number to absolute number
-                absolute_num = start_idx + num
-                return str(absolute_num)
+                # Return the page-relative number since results contains only current page
+                return str(num)
             else:
                 console.print(f"[red]Please enter a number between 1 and {len(page_results)}[/red]")
         else:

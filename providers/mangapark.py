@@ -236,23 +236,36 @@ class MangaParkProvider(BaseProvider):
                 try:
                     title = element.text.strip()
                     href = element.get_attribute('href')
-                    
+
                     if not title or len(title) < 3 or not href:
                         continue
-                    
+
                     if href in seen_urls:
                         continue
-                    
+
                     seen_urls.add(href)
-                    
+
                     # Extract chapter ID from URL
                     chapter_id = href.split('/')[-1] if '/' in href else href
-                    
+
                     # Try to extract chapter number from title
                     import re
                     match = re.search(r'(?:chapter|ch\.?)\s*(\d+(?:\.\d+)?)', title.lower())
                     chapter_number = match.group(1) if match else str(len(chapters) + 1)
-                    
+
+                    # Extract release date from the time element
+                    release_date = None
+                    try:
+                        # Look for the parent element that contains both the chapter link and time
+                        parent_element = element.find_element(By.XPATH, "./ancestor-or-self::*[contains(@class, 'flex') or contains(@class, 'gap')]/div[last()]")
+                        if parent_element:
+                            time_elem = parent_element.find_element(By.CSS_SELECTOR, "div.ml-auto.whitespace-nowrap time span")
+                            if time_elem:
+                                # Use the text content as the release date string
+                                release_date = time_elem.text.strip() if time_elem.text else None
+                    except Exception as e:
+                        logger.debug(f"Could not extract release date: {e}")
+
                     chapters.append(Chapter(
                         chapter_id=chapter_id,
                         manga_id=manga_id,
@@ -260,7 +273,7 @@ class MangaParkProvider(BaseProvider):
                         chapter_number=chapter_number,
                         volume=None,
                         url=href if href.startswith('http') else urljoin(self.base_url, href),
-                        release_date=None,
+                        release_date=release_date,
                         language="en"
                     ))
                     

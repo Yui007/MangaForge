@@ -13,6 +13,7 @@ class WeebCentralProvider(BaseProvider):
     provider_id = "weebcentral"
     provider_name = "WeebCentral"
     base_url = "https://weebcentral.com"
+    requires_browser = True
 
     def __init__(self):
         """Initialize the WeebCentral provider."""
@@ -30,7 +31,44 @@ class WeebCentralProvider(BaseProvider):
             'Pragma': 'no-cache',
             'Cache-Control': 'no-cache',
         }
+        self.driver = None  # Don't initialize Selenium yet
         logger.info("WeebCentral provider initialized")
+
+    def _ensure_driver(self):
+        """Initialize Selenium driver only when first needed (lazy loading)."""
+        if self.driver is None:
+            logger.info("Initializing WeebCentral Selenium driver")
+            self._initialize_driver()
+
+    def _initialize_driver(self):
+        """Initialize Chrome driver for WeebCentral."""
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        # Use same Chrome options as test.py but headless for production
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+
+        self.driver = webdriver.Chrome(options=options)
+        logger.info("WeebCentral Selenium driver initialized")
+
+    def cleanup(self):
+        """Clean up Selenium driver."""
+        if self.driver:
+            try:
+                logger.info("Closing WeebCentral browser driver")
+                self.driver.quit()
+                self.driver = None
+            except Exception as e:
+                logger.debug(f"Error closing WeebCentral driver: {e}")
+
+    def __del__(self):
+        """Clean up Selenium driver."""
+        self.cleanup()
 
     def search(self, query: str, page: int = 1) -> tuple[List[MangaSearchResult], bool]:
         """
@@ -43,15 +81,18 @@ class WeebCentralProvider(BaseProvider):
             search_url = f"https://weebcentral.com/search?text={query}&sort=Best+Match&order=Descending&official=Any&anime=Any&adult=Any&display_mode=Full+Display"
             logger.debug(f"Searching WeebCentral: {search_url}")
 
-            # Use Selenium to load the search page (following test.py approach)
-            image_urls = self._get_search_results_selenium(search_url)
+            # Initialize driver only when needed (lazy loading)
+            self._ensure_driver()
 
-            if not image_urls:
+            # Use Selenium to load the search page (following test.py approach)
+            results = self._get_search_results_selenium(search_url)
+
+            if not results:
                 logger.warning(f"No search results found for '{query}'")
                 return ([], False)
 
-            logger.info(f"Found {len(image_urls)} search results for '{query}'")
-            return (image_urls, False)  # WeebCentral search doesn't have pagination
+            logger.info(f"Found {len(results)} search results for '{query}'")
+            return (results, False)  # WeebCentral search doesn't have pagination
 
         except Exception as e:
             logger.error(f"WeebCentral search failed: {e}")

@@ -23,15 +23,16 @@ logger = logging.getLogger(__name__)
 
 class MangaParkProvider(BaseProvider):
     """Provider for MangaPark with NSFW mode enabled."""
-    
+
     provider_id = "mangapark"
     provider_name = "MangaPark"
     base_url = "https://mangapark.net"
     requires_browser = True
-    
+
     def __init__(self):
-        """Initialize the provider WITHOUT starting Selenium yet."""
-        self.driver = None  # Don't initialize here
+        """Initialize the provider with HTTP session and Selenium setup."""
+        super().__init__()  # Initialize HTTP session from BaseProvider
+        self.driver = None  # Don't initialize Selenium yet
     
     def _initialize_driver_with_nsfw(self):
         """Initialize Chrome driver and enable NSFW settings permanently."""
@@ -322,11 +323,15 @@ class MangaParkProvider(BaseProvider):
             except Exception as e:
                 logger.warning(f"Timeout waiting for images: {e}")
 
-            # Find image elements - use same logic as port file
+            # Find image elements - use the correct selector based on HTML structure
             image_elements = driver.find_elements(By.CSS_SELECTOR, "img.w-full.h-full")
 
             if not image_elements:
-                # Try alternative selector
+                # Try alternative selectors based on the provided HTML structure
+                image_elements = driver.find_elements(By.CSS_SELECTOR, "div[data-name='image-item'] img")
+
+            if not image_elements:
+                # Try another fallback selector
                 image_elements = driver.find_elements(By.CSS_SELECTOR, "main img")
 
             image_urls = []

@@ -355,40 +355,91 @@ class MangaParkProvider(BaseProvider):
 
     def get_chapter_images(self, chapter_id: str) -> List[str]:
         """
-        Get all image URLs for a chapter from MangaPark.net.
+        Get all image URLs for a chapter from MangaPark.net using Selenium (like the original script).
 
         Args:
-            chapter_id: MangaPark chapter ID
+            chapter_id: The full URL of the chapter, as returned by `_extract_chapter_id_from_url`.
 
         Returns:
             List of direct image URLs in reading order
         """
-        logger.debug(f"Fetching MangaPark chapter images for: {chapter_id}")
+        chapter_url = chapter_id  # The chapter_id is the full URL
+        logger.debug(f"Fetching MangaPark chapter images from URL: {chapter_url}")
 
+        # Import Selenium here to avoid import errors if not available
         try:
-            # Build chapter URL
-            chapter_url = f"{self.base_url}/c{chapter_id}"
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            import time
+        except ImportError:
+            logger.error("Selenium not available for MangaPark image extraction")
+            raise ProviderError("Selenium required for MangaPark image extraction")
 
-            # Make request
-            response = self.session.get(chapter_url)
-            response.raise_for_status()
+        driver = None
+        try:
+            # Setup Chrome options for faster performance (like original script)
+            chrome_options = Options()
+            chrome_options.add_argument("--non-headless")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument("--disable-default-apps")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-ipc-flooding-protection")
+            chrome_options.page_load_strategy = 'eager'
 
-            # Parse HTML
-            soup = self._parse_html(response.text)
+            # Initialize browser
+            driver = webdriver.Chrome(options=chrome_options)
 
-            # Extract image URLs from JavaScript or HTML
-            image_urls = self._extract_image_urls(soup)
+            # Navigate to the chapter
+            driver.get(chapter_url)
 
-            if not image_urls:
-                logger.warning(f"No image URLs found for chapter {chapter_id}")
+            # Wait for the page to load (like original script)
+            time.sleep(10)
+
+            # Wait for images to load (like original script)
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "img.w-full.h-full"))
+                )
+                logger.debug("Images loaded successfully")
+            except Exception as e:
+                logger.debug(f"Timeout waiting for images: {e}")
+
+            # Find all image containers using the exact selector provided
+            image_containers = driver.find_elements(By.CSS_SELECTOR, "div[data-name='image-item']")
+
+            if not image_containers:
+                logger.warning(f"No image containers found for chapter {chapter_url}")
                 return []
 
-            logger.info(f"Extracted {len(image_urls)} image URLs from MangaPark chapter")
+            # Get all image URLs from the containers
+            image_urls = []
+            for container in image_containers:
+                img_element = container.find_element(By.CSS_SELECTOR, "img.w-full.h-full")
+                if img_element:
+                    img_url = img_element.get_attribute('src')
+                    if img_url:
+                        image_urls.append(img_url)
+
+            logger.info(f"Extracted {len(image_urls)} image URLs from MangaPark chapter using Selenium")
             return image_urls
 
         except Exception as e:
             logger.error(f"MangaPark get_chapter_images failed: {e}")
             raise ProviderError(f"Failed to get chapter images: {e}")
+        finally:
+            if driver:
+                driver.quit()
 
     def _parse_html(self, html: str):
         """Parse HTML content using BeautifulSoup."""
@@ -415,11 +466,8 @@ class MangaParkProvider(BaseProvider):
 
     def _extract_chapter_id_from_url(self, url: str) -> str:
         """Extract chapter ID from MangaPark chapter URL."""
-        # URL format: https://mangapark.net/c{chapter_id}
-        match = re.search(r'/c(\d+)', url)
-        if match:
-            return match.group(1)
-        return url.split('/')[-1]
+        # The URL is the ID for mangapark
+        return url
 
     def _extract_title(self, soup) -> str:
         """Extract manga title from manga page."""

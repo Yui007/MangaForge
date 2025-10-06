@@ -258,104 +258,95 @@ class MangaParkProvider(BaseProvider):
             # Build manga URL
             manga_url = f"{self.base_url}/title/{manga_id}"
 
-            # Make request to manga page
+            # Make request
             response = self.session.get(manga_url)
             response.raise_for_status()
 
             # Parse HTML
             soup = self._parse_html(response.text)
 
-            # Extract chapters using the exact selector from the working HTML structure
+            # Extract chapters using the exact HTML structure provided
             chapters = []
-            chapter_elements = soup.select('a.link-hover.link-primary.visited\\:text-accent')
 
-            if not chapter_elements:
-                logger.warning("No chapter elements found with primary selector, trying fallback selectors")
-                # Fallback selectors from the original script and HTML structure
-                selectors_to_try = [
-                    'a[href*="/title/"][href*="/chapter"]',
-                    'a[href*="/c"]',
-                    '.chapter-list a',
-                    '[data-mal-sync-episode] a',
-                    'a[href*="chapter"]',
-                    'a.visited\\:text-accent',
-                    'a.link-primary'
-                ]
+            # Find the chapter list container first
+            chapter_list_container = soup.find('div', {'data-name': 'chapter-list', 'class': 'space-y-5'})
+            if not chapter_list_container:
+                logger.warning("Chapter list container not found")
+                return chapters
 
-                for selector in selectors_to_try:
-                    chapter_elements = soup.select(selector)
-                    if chapter_elements:
-                        logger.info(f"Found chapters using fallback selector: {selector}")
-                        break
+            # Find all chapter links first, then extract information from each
+            all_chapter_links = chapter_list_container.find_all('a', class_='link-hover link-primary visited:text-accent')
 
-            if not chapter_elements:
-                logger.error("No chapter elements found even with fallback selectors")
-                # Save debug page for troubleshooting
-                debug_file = "debug_mangapark_page.html"
-                with open(debug_file, 'w', encoding='utf-8') as f:
-                    f.write(response.text)
-                logger.info(f"Debug page saved to: {debug_file}")
-                return []
+            logger.info(f"Found {len(all_chapter_links)} chapter links total")
 
-            logger.info(f"Found {len(chapter_elements)} potential chapters")
+            # Process each chapter link and extract complete information
+            seen_urls = set()
 
-            for chapter_element in chapter_elements:
+            for link in all_chapter_links:
                 try:
-                    title = chapter_element.get_text(strip=True)
-                    href = chapter_element.get('href', '')
-
-                    # Skip if title is empty or too short
-                    if not title or len(title) < 3:
+                    chapter_title = link.text.strip()
+                    if 'Chapter' not in chapter_title:
                         continue
 
-                    # Skip if href is empty or not a chapter link
-                    if not href or ('/title/' not in href and '/c' not in href):
-                        continue
+                    chapter_url = self.base_url + link['href']
 
-                    # Construct absolute URL
-                    if href.startswith('http'):
-                        url = href
-                    else:
-                        url = urljoin(manga_url, href)
+                    # Skip duplicates
+                    if chapter_url in seen_urls:
+                        continue
+                    seen_urls.add(chapter_url)
 
                     # Extract chapter information
-                    chapter_id = self._extract_chapter_id_from_url(url)
-                    chapter_number = self._extract_chapter_number(title)
-                    volume = self._extract_volume(title)
+                    chapter_id = self._extract_chapter_id_from_url(chapter_url)
+                    chapter_number = self._extract_chapter_number(chapter_title)
 
-                    # Extract release date if available
-                    release_date = self._extract_chapter_date(chapter_element)
+                    # Find the parent container to extract additional info
+                    parent_div = link.find_parent('div', class_='px-2 py-2 flex flex-wrap justify-between hover:bg-accent/5 border-b border-base-300/50 group-[.flex-col]:last:border-b-0 group-[.flex-col-reverse]:first:border-b-0')
+
+                    # Extract uploader info
+                    uploader = "Unknown"
+                    if parent_div:
+                        uploader_container = parent_div.find('div', class_='ml-auto inline-flex flex-wrap justify-end items-center text-sm opacity-70 space-x-2')
+                        if uploader_container:
+                            uploader_link = uploader_container.find('a', class_='link-hover link-primary')
+                            if uploader_link:
+                                uploader = uploader_link.text.strip()
+
+                    # Extract release date
+                    release_date = None
+                    if parent_div:
+                        time_element = parent_div.find('time')
+                        if time_element:
+                            date_span = time_element.find('span', {'data-passed': True})
+                            if date_span:
+                                release_date = date_span.text.strip()
 
                     chapter = Chapter(
                         chapter_id=chapter_id,
                         manga_id=manga_id,
-                        title=title,
+                        title=chapter_title,
                         chapter_number=chapter_number,
-                        volume=volume,
-                        url=url,
+                        volume=None,
+                        url=chapter_url,
                         release_date=release_date,
                         language="en"
                     )
                     chapters.append(chapter)
 
                 except Exception as e:
-                    logger.debug(f"Error processing chapter element: {e}")
+                    logger.debug(f"Error processing chapter link: {e}")
                     continue
 
-            # Remove duplicates based on URL
-            seen_urls = set()
-            unique_chapters = []
-            for chapter in chapters:
-                if chapter.url not in seen_urls:
-                    seen_urls.add(chapter.url)
-                    unique_chapters.append(chapter)
+            # Sort chapters by number (newest first for now, will reverse later)
+            def sort_key(chapter):
+                try:
+                    num = float(chapter.chapter_number)
+                    return num
+                except ValueError:
+                    return 999  # Put special chapters at the end
 
-            chapters = unique_chapters
+            chapters.sort(key=sort_key)
 
-            # Reverse order so Chapter 1 comes first
-            chapters.reverse()
-
-            logger.info(f"Extracted {len(chapters)} chapters from MangaPark")
+            logger.info(f"Successfully processed {len(chapters)} chapters from MangaPark")
             return chapters
 
         except Exception as e:
@@ -432,17 +423,10 @@ class MangaParkProvider(BaseProvider):
 
     def _extract_title(self, soup) -> str:
         """Extract manga title from manga page."""
-        # Use the exact selector from the working HTML structure
-        title_selectors = [
-            'a.link.link-hover',
-            '.link.link-hover',
-            'h1.font-bold',
-            'h1.text-2xl',
-            'h1'
-        ]
-
-        for selector in title_selectors:
-            title_element = soup.select_one(selector)
+        # Use the exact working selector from the test script
+        title_block = soup.select_one("div.space-y-2.hidden.md\\:block")
+        if title_block:
+            title_element = title_block.select_one("h3 a")
             if title_element:
                 return title_element.text.strip()
 
@@ -450,7 +434,11 @@ class MangaParkProvider(BaseProvider):
 
     def _extract_alternative_titles(self, soup) -> List[str]:
         """Extract alternative titles."""
-        # MangaPark doesn't prominently display alternative titles
+        # Use the exact working selector from the test script
+        title_block = soup.select_one("div.space-y-2.hidden.md\\:block")
+        if title_block:
+            alt_titles = [span.text.strip() for span in title_block.select("div.mt-1 span")]
+            return alt_titles
         return []
 
     def _extract_description(self, soup) -> str:
@@ -479,20 +467,26 @@ class MangaParkProvider(BaseProvider):
         """Extract author information."""
         authors = []
 
-        # Look for author information
-        author_selectors = [
-            '.series-author',
-            '.author',
-            '[itemprop="author"]',
-            'a[href*="author"]'
-        ]
+        # Use the exact working selector from the test script
+        title_block = soup.select_one("div.space-y-2.hidden.md\\:block")
+        if title_block:
+            authors = [a.text.strip() for a in title_block.select("div.mt-2 a")]
 
-        for selector in author_selectors:
-            author_elements = soup.select(selector)
-            for element in author_elements:
-                author = element.text.strip()
-                if author and author not in authors:
-                    authors.append(author)
+        # Fallback to generic selectors if specific one doesn't work
+        if not authors:
+            author_selectors = [
+                '.series-author',
+                '.author',
+                '[itemprop="author"]',
+                'a[href*="author"]'
+            ]
+
+            for selector in author_selectors:
+                author_elements = soup.select(selector)
+                for element in author_elements:
+                    author = element.text.strip()
+                    if author and author not in authors:
+                        authors.append(author)
 
         return authors
 
@@ -500,20 +494,30 @@ class MangaParkProvider(BaseProvider):
         """Extract artist information."""
         artists = []
 
-        # Look for artist information
-        artist_selectors = [
-            '.series-artist',
-            '.artist',
-            '[itemprop="artist"]',
-            'a[href*="artist"]'
-        ]
+        # Use the same selector as authors since MangaPark may list them together
+        title_block = soup.select_one("div.space-y-2.hidden.md\\:block")
+        if title_block:
+            # Artists might be in the same section as authors
+            creators = [a.text.strip() for a in title_block.select("div.mt-2 a")]
+            # For now, assume all creators are authors until we can distinguish
+            # In a real implementation, you might need to check the context
+            artists = creators
 
-        for selector in artist_selectors:
-            artist_elements = soup.select(selector)
-            for element in artist_elements:
-                artist = element.text.strip()
-                if artist and artist not in artists:
-                    artists.append(artist)
+        # Fallback to generic selectors if specific one doesn't work
+        if not artists:
+            artist_selectors = [
+                '.series-artist',
+                '.artist',
+                '[itemprop="artist"]',
+                'a[href*="artist"]'
+            ]
+
+            for selector in artist_selectors:
+                artist_elements = soup.select(selector)
+                for element in artist_elements:
+                    artist = element.text.strip()
+                    if artist and artist not in artists:
+                        artists.append(artist)
 
         return artists
 
@@ -521,17 +525,10 @@ class MangaParkProvider(BaseProvider):
         """Extract genre information."""
         genres = []
 
-        # Use the exact selector from the working HTML structure
-        genre_container = soup.select_one('div.flex.items-center.flex-wrap')
-        if genre_container:
-            # Find the "Genres:" label and extract all genre spans after it
-            genres_label = genre_container.find('b', string=re.compile(r'Genres?:', re.IGNORECASE))
-            if genres_label:
-                # Get all span elements that contain genre text
-                for span in genre_container.select('span.whitespace-nowrap'):
-                    genre = span.text.strip()
-                    if genre and genre not in [',', ''] and genre not in genres:
-                        genres.append(genre)
+        # Use the exact working selector from the test script
+        genres_div = soup.select_one("div.flex.items-center.flex-wrap")
+        if genres_div:
+            genres = [g.text.strip() for g in genres_div.select("span span")]
 
         # Fallback to generic selectors if specific one doesn't work
         if not genres:

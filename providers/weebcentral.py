@@ -397,50 +397,68 @@ class WeebCentralProvider(BaseProvider):
 
     def _extract_genres(self, soup) -> List[str]:
         """Extract genre information using WeebCentral-specific selectors."""
-        genre_set = set()
+        genres = []
 
-        # Use the correct WeebCentral selector for genres
-        genre_divs = soup.find_all('div', class_='attr-item')
-        for div in genre_divs:
-            if div.find('b', class_='text-muted', string='Genres:'):
-                # Only get direct text from span elements, skip nested u tags
-                # Find the container span first
-                container_span = div.find('span')
-                if container_span:
-                    # Get only direct span children (not u tags)
-                    for span in container_span.find_all('span', recursive=False):
-                        genre = span.text.strip()
-                        if genre and genre not in [',', '']:
-                            genre_set.add(genre)
-
-                    # Also get text from u tags (they're at the same level)
-                    for u_tag in container_span.find_all('u'):
-                        genre = u_tag.text.strip()
-                        if genre and genre not in [',', '']:
-                            genre_set.add(genre)
-                break
-
-        genres = sorted(list(genre_set))
-
-        # Fallback to generic selectors if specific one doesn't work
-        if not genres:
-            genre_selectors = ['.series-genres', '.genres', '.genre', '[itemprop="genre"]']
-            for selector in genre_selectors:
-                genre_elements = soup.select(selector)
-                for element in genre_elements:
-                    genre = element.text.strip()
+        # Use the new WeebCentral selector for tags/genres
+        # Look for all li elements that contain "Tags(s):"
+        for li_element in soup.find_all('li'):
+            strong_element = li_element.find('strong', string='Tags(s):')
+            if strong_element:
+                # Find all genre links in the tags section
+                genre_links = li_element.select('a[href*="included_tag="]')
+                for link in genre_links:
+                    genre = link.text.strip()
                     if genre and genre not in genres:
                         genres.append(genre)
+                break  # Found the tags section, no need to continue
+
+        # Fallback to old method if new one doesn't work
+        if not genres:
+            genre_set = set()
+            genre_divs = soup.find_all('div', class_='attr-item')
+            for div in genre_divs:
+                if div.find('b', class_='text-muted', string='Genres:'):
+                    container_span = div.find('span')
+                    if container_span:
+                        for span in container_span.find_all('span', recursive=False):
+                            genre = span.text.strip()
+                            if genre and genre not in [',', '']:
+                                genre_set.add(genre)
+
+                        for u_tag in container_span.find_all('u'):
+                            genre = u_tag.text.strip()
+                            if genre and genre not in [',', '']:
+                                genre_set.add(genre)
+                    break
+
+            genres = sorted(list(genre_set))
 
         return genres
 
     def _extract_status(self, soup) -> str:
         """Extract publication status using WeebCentral-specific selectors."""
-        # Use the correct WeebCentral selector for "Original work"
+        # Use the new WeebCentral selector for status
+        # Look for all li elements that contain "Status:"
+        for li_element in soup.find_all('li'):
+            strong_element = li_element.find('strong', string='Status:')
+            if strong_element:
+                # Find the status link
+                status_link = li_element.find('a', href=True)
+                if status_link:
+                    status_text = status_link.text.strip()
+                    if "Ongoing" in status_text:
+                        return "Ongoing"
+                    elif "Completed" in status_text:
+                        return "Completed"
+                    elif "Hiatus" in status_text:
+                        return "Hiatus"
+                    else:
+                        return status_text
+                break  # Found the status section, no need to continue
+
+        # Fallback to old method if new one doesn't work
         original_work_element = soup.find('b', class_='text-muted', string='Original work:')
         if original_work_element:
-            # For WeebCentral, if it shows "Original work", it typically means it's original/completed
-            # This is a heuristic since WeebCentral doesn't always clearly mark status
             return "Completed"
 
         # Look for other status indicators
@@ -459,14 +477,24 @@ class WeebCentralProvider(BaseProvider):
         return "Unknown"
 
     def _extract_year(self, soup) -> Optional[int]:
-        """Extract publication year."""
-        # Look for year information
-        year_selectors = [
-            '.series-year',
-            '.year',
-            '.publication-year'
-        ]
+        """Extract publication year using WeebCentral-specific selectors."""
+        # Use the new WeebCentral selector for released year
+        # Look for all li elements that contain "Released:"
+        for li_element in soup.find_all('li'):
+            strong_element = li_element.find('strong', string='Released:')
+            if strong_element:
+                # Find the year span
+                year_span = li_element.find('span')
+                if year_span:
+                    year_text = year_span.text.strip()
+                    try:
+                        return int(year_text)
+                    except ValueError:
+                        pass
+                break  # Found the released section, no need to continue
 
+        # Fallback to old method if new one doesn't work
+        year_selectors = ['.series-year', '.year', '.publication-year']
         for selector in year_selectors:
             year_element = soup.select_one(selector)
             if year_element:
@@ -479,13 +507,28 @@ class WeebCentralProvider(BaseProvider):
         return None
 
     def _extract_cover_url(self, soup) -> str:
-        """Extract cover image URL."""
+        """Extract cover image URL using WeebCentral-specific selectors."""
+        # Use the new WeebCentral selector for cover image
+        cover_section = soup.select_one('section.flex.items-center.justify-center')
+        if cover_section:
+            picture_element = cover_section.find('picture')
+            if picture_element:
+                # Try to get the fallback img src first (usually higher quality)
+                img_element = picture_element.find('img')
+                if img_element and 'src' in img_element.attrs:
+                    cover_url = img_element['src']
+                    if not cover_url.startswith(('http://', 'https://')):
+                        return urljoin(self.base_url, cover_url)
+                    return cover_url
+
+        # Fallback to old method if new one doesn't work
         cover_img_element = soup.select_one("img[alt$='cover']")
         if cover_img_element and 'src' in cover_img_element.attrs:
             cover_url = cover_img_element['src']
             if not cover_url.startswith(('http://', 'https://')):
                 return urljoin(self.base_url, cover_url)
             return cover_url
+
         return ""
 
     def _extract_chapter_number(self, chapter_title: str) -> str:
@@ -514,8 +557,15 @@ class WeebCentralProvider(BaseProvider):
     def _extract_chapter_date(self, chapter_element) -> Optional[str]:
         """Extract chapter release date using WeebCentral-specific selectors."""
         try:
-            # Look for the parent container that contains the date
-            # The date is in a div with class "extra" containing the timestamp
+            # Use the new WeebCentral selector for chapter date
+            time_element = chapter_element.find('time')
+            if time_element and 'datetime' in time_element.attrs:
+                # Return the formatted date text (e.g., "Sep 29")
+                date_text = time_element.text.strip()
+                if date_text:
+                    return date_text
+
+            # Fallback to old method if new one doesn't work
             parent_div = chapter_element.find_parent()
             if parent_div:
                 # Try multiple selectors to find the date

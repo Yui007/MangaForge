@@ -18,6 +18,7 @@ providers:
   enabled:                    # List of enabled provider IDs
     - mock                     # Mock provider for testing
     - bato                     # Bato.to provider
+    - weebcentral              # weebcentral.com provider
 
   rate_limits:                # Seconds between requests per provider
     default: 1.0

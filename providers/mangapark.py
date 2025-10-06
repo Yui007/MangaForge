@@ -434,12 +434,14 @@ class MangaParkProvider(BaseProvider):
 
     def _has_next_page(self, soup, current_page: int) -> bool:
         """Check if there's a next page in MangaPark search results."""
-        # Simple approach: Check if current page has any results
-        # If it has results, assume there's likely a next page
-        # The calling code will handle incrementing page numbers and checking for empty results
+        # Brilliant approach: Check if current page has fewer results than results_per_page
+        # If it has fewer than results_per_page (30), this must be the last page
+        # If it has exactly results_per_page (30) or more, there might be more pages
 
         result_items = soup.select("div.grid > div.flex.border-b")
-        return len(result_items) > 0
+        results_per_page = _config.get('ui.results_per_page', 30)
+
+        return len(result_items) >= results_per_page
 
     def __del__(self):
         """Clean up Selenium driver."""

@@ -211,7 +211,7 @@ class MangaParkProvider(BaseProvider):
     
     def get_chapters(self, manga_id: str) -> List[Chapter]:
         """Get all chapters for a manga."""
-        self._ensure_driver()  # Initialize driver only when needed
+        self._ensure_driver()
         try:
             manga_url = f"{self.base_url}/title/{manga_id}"
             logger.debug(f"Fetching chapters from: {manga_url}")
@@ -219,14 +219,12 @@ class MangaParkProvider(BaseProvider):
             self.driver.get(manga_url)
             time.sleep(3)
             
-            # Find chapter elements
             chapter_elements = self.driver.find_elements(
                 By.CSS_SELECTOR, 
                 'a.link-hover.link-primary.visited\\:text-accent'
             )
             
             if not chapter_elements:
-                # Try alternative selector
                 chapter_elements = self.driver.find_elements(
                     By.CSS_SELECTOR,
                     'a[href*="/title/"][href*="/chapter"]'
@@ -248,34 +246,29 @@ class MangaParkProvider(BaseProvider):
 
                     seen_urls.add(href)
 
-                    # Extract chapter ID from URL
-                    chapter_id = href.split('/')[-1] if '/' in href else href
-
-                    # Try to extract chapter number from title
+                    # Extract chapter number
                     import re
                     match = re.search(r'(?:chapter|ch\.?)\s*(\d+(?:\.\d+)?)', title.lower())
                     chapter_number = match.group(1) if match else str(len(chapters) + 1)
 
-                    # Extract release date from the time element
+                    # Extract release date
                     release_date = None
                     try:
-                        # Look for the parent element that contains both the chapter link and time
                         parent_element = element.find_element(By.XPATH, "./ancestor-or-self::*[contains(@class, 'flex') or contains(@class, 'gap')]/div[last()]")
                         if parent_element:
                             time_elem = parent_element.find_element(By.CSS_SELECTOR, "div.ml-auto.whitespace-nowrap time span")
                             if time_elem:
-                                # Use the text content as the release date string
                                 release_date = time_elem.text.strip() if time_elem.text else None
                     except Exception as e:
                         logger.debug(f"Could not extract release date: {e}")
 
                     chapters.append(Chapter(
-                        chapter_id=chapter_id,
+                        chapter_id=href,  # ← CHANGED: Store the FULL URL as chapter_id
                         manga_id=manga_id,
                         title=title,
                         chapter_number=chapter_number,
                         volume=None,
-                        url=href if href.startswith('http') else urljoin(self.base_url, href),
+                        url=href,  # ← CHANGED: Use full href directly
                         release_date=release_date,
                         language="en"
                     ))
@@ -284,7 +277,6 @@ class MangaParkProvider(BaseProvider):
                     logger.debug(f"Error parsing chapter element: {e}")
                     continue
             
-            # Reverse to get chapters in reading order (oldest first)
             chapters.reverse()
             
             logger.info(f"Found {len(chapters)} chapters")
@@ -294,7 +286,6 @@ class MangaParkProvider(BaseProvider):
             logger.error(f"Failed to get chapters: {e}")
             raise
         finally:
-            # Ensure cleanup is called even if an error occurs
             self.cleanup()
     
     def get_chapter_images(self, chapter_id: str) -> List[str]:
@@ -315,9 +306,9 @@ class MangaParkProvider(BaseProvider):
 
             driver = webdriver.Chrome(options=chrome_options)
 
-            # Construct chapter URL properly
-            base_url = "https://mangapark.net"
-            chapter_url = urljoin(base_url, chapter_id) if not chapter_id.startswith('http') else chapter_id
+            # chapter_id parameter is actually the full URL from Chapter object
+            # Use it directly since it should already be properly constructed
+            chapter_url = chapter_id
 
             logger.debug(f"Fetching chapter images: {chapter_url}")
             driver.get(chapter_url)

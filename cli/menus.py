@@ -61,8 +61,8 @@ def select_chapters(chapters: List['Chapter'], config: 'Config') -> List['Chapte
         end_idx = min(start_idx + chapters_per_page, len(chapters))
         page_chapters = chapters[start_idx:end_idx]
 
-        # Display chapters table
-        choice = display_chapters_table(page_chapters, current_page, total_pages, chapters_per_page)
+        # Display chapters table with correct indices
+        choice = display_chapters_table(chapters, current_page, total_pages, chapters_per_page)
 
         if choice == "N" and current_page < total_pages:
             current_page += 1

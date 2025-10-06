@@ -150,36 +150,36 @@ class MangaParkProvider(BaseProvider):
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
             
             # Extract title
-            title_elem = soup.select_one('h1, h2.text-2xl')
+            title_elem = soup.select_one('h3.text-lg.md\\:text-2xl.font-bold a')
             title = title_elem.get_text(strip=True) if title_elem else "Unknown"
-            
+
             # Extract cover
             cover_elem = soup.select_one('img[alt*="cover"], img.object-cover')
             cover_url = cover_elem.get('src', '') if cover_elem else ''
-            
+
             # Extract description
-            desc_elem = soup.select_one('div.summary, div[class*="description"]')
+            desc_elem = soup.select_one('div.limit-html-p')
             description = desc_elem.get_text(strip=True) if desc_elem else ''
-            
+
             # Extract authors
             authors = []
-            author_elems = soup.select('a[href*="/author/"]')
+            author_elems = soup.select('.mt-2.text-sm.md\\:text-base.opacity-80 a')
             for elem in author_elems:
                 author = elem.get_text(strip=True)
                 if author and author not in authors:
                     authors.append(author)
-            
+
             # Extract genres
             genres = []
-            genre_elems = soup.select('a[href*="/genre/"]')
+            genre_elems = soup.select('.flex.items-center.flex-wrap span.whitespace-nowrap')
             for elem in genre_elems:
                 genre = elem.get_text(strip=True)
-                if genre and genre not in genres:
+                if genre and genre not in genres and genre not in ['Genres:', ',']:
                     genres.append(genre)
-            
+
             # Extract status
             status = "Unknown"
-            status_elem = soup.select_one('div:contains("Status")')
+            status_elem = soup.select_one('.font-bold.uppercase.text-success')
             if status_elem:
                 status_text = status_elem.get_text(strip=True).lower()
                 if 'ongoing' in status_text:
@@ -208,10 +208,11 @@ class MangaParkProvider(BaseProvider):
     
     def get_chapters(self, manga_id: str) -> List[Chapter]:
         """Get all chapters for a manga."""
+        self._ensure_driver()  # Initialize driver only when needed
         try:
             manga_url = f"{self.base_url}/title/{manga_id}"
             logger.debug(f"Fetching chapters from: {manga_url}")
-            
+
             self.driver.get(manga_url)
             time.sleep(3)
             

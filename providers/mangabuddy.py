@@ -507,42 +507,35 @@ class MangaBuddyProvider(BaseProvider):
         return None
 
     def _extract_image_urls(self, soup) -> List[str]:
-        """Extract image URLs from chapter page."""
+        """Extract image URLs from chapter page using MangaBuddy-specific selectors."""
         image_urls = []
 
-        # Try to find image URLs in script tags (common pattern)
-        script_tags = soup.find_all('script')
-        for script in script_tags:
-            if script.string:
-                # Look for image arrays in JavaScript
-                if 'imgUrls' in script.string or 'images' in script.string:
-                    # Try to extract JSON-like arrays
-                    matches = re.findall(r'\["[^"]+\.(jpg|jpeg|png|webp)"(?:\s*,\s*"[^"]+\.(jpg|jpeg|png|webp)")*\]', script.string)
-                    for match in matches:
-                        try:
-                            # Parse the array-like string
-                            urls = re.findall(r'"([^"]+\.(jpg|jpeg|png|webp))"', match)
-                            image_urls.extend(urls)
-                        except:
-                            continue
-
-        # Alternative: look for direct image elements
-        if not image_urls:
-            img_elements = soup.find_all('img', class_='chapter-image')
+        # Use the correct MangaBuddy image selector
+        chapter_images_div = soup.find('div', class_='container', id='chapter-images')
+        if chapter_images_div:
+            img_elements = chapter_images_div.find_all('img')
             for img in img_elements:
-                src = img.get('data-src') or img.get('src')
-                if src and src.endswith(('.jpg', '.jpeg', '.png', '.webp')):
-                    image_urls.append(src)
+                # Get the image URL from data-src or src attribute
+                img_url = img.get('data-src') or img.get('src')
+                if img_url and img_url.endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif')):
+                    # Clean up the URL (remove query parameters if present)
+                    clean_url = re.sub(r'\?.*$', '', img_url)
+                    if clean_url:
+                        image_urls.append(clean_url)
 
-        # Clean URLs and ensure they start with http
-        valid_urls = []
-        for url in image_urls:
-            if url and isinstance(url, str):
-                if not url.startswith('http'):
-                    url = urljoin(self.base_url, url)
-                valid_urls.append(url)
+        # If no images found with the specific selector, try fallback
+        if not image_urls:
+            # Look for any img tags with manga-related URLs
+            all_img_elements = soup.find_all('img')
+            for img in all_img_elements:
+                img_url = img.get('data-src') or img.get('src')
+                if img_url and 'mbcdns' in img_url and img_url.endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif')):
+                    clean_url = re.sub(r'\?.*$', '', img_url)
+                    if clean_url and clean_url not in image_urls:
+                        image_urls.append(clean_url)
 
-        return valid_urls
+        logger.debug(f"Found {len(image_urls)} image URLs")
+        return image_urls
 
     def _has_next_page(self, soup, current_page: int) -> bool:
         """Check if there's a next page in search results."""

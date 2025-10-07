@@ -125,6 +125,7 @@ class MangaBuddyProvider(BaseProvider):
             else:
                 if not manga_id:
                     raise ValueError("manga_id is required when url is not provided")
+                # manga_id should be just the slug, not a full path
                 target_url = f"{self.base_url}/{manga_id}"
 
             logger.debug(f"Fetching MangaBuddy manga info from: {target_url}")
@@ -256,8 +257,21 @@ class MangaBuddyProvider(BaseProvider):
         logger.debug(f"Fetching MangaBuddy chapter images for: {chapter_id}")
 
         try:
-            # Build chapter URL
-            chapter_url = f"{self.base_url}/{chapter_id}"
+            # First get the chapter info to get the correct URL
+            # Since we need to find the manga_id for this chapter
+            # We'll use a more direct approach by constructing the URL properly
+
+            # Extract manga_id from chapter_id (format: manga-id/chapter-id)
+            if '/' in chapter_id:
+                manga_slug = chapter_id.split('/')[0]
+                chapter_slug = chapter_id.split('/')[-1]
+                chapter_url = f"{self.base_url}/{manga_slug}/{chapter_slug}"
+            else:
+                # Fallback: assume chapter_id is just the chapter slug
+                # This shouldn't happen in normal usage since get_chapters provides full URLs
+                chapter_url = f"{self.base_url}/{chapter_id}"
+
+            logger.debug(f"Chapter URL: {chapter_url}")
 
             # Make request
             response = self.session.get(chapter_url)
@@ -296,9 +310,19 @@ class MangaBuddyProvider(BaseProvider):
     def _extract_chapter_id_from_url(self, url: str) -> str:
         """Extract chapter ID from MangaBuddy chapter URL."""
         # URL format: https://mangabuddy.com/{manga_id}/{chapter_id}
-        parts = url.split('/')
+        # We need to return: {manga_id}/{chapter_id}
+        
+        match = re.search(r'://mangabuddy\.com/([^/]+)/([^/?]+)', url)
+        if match:
+            manga_slug = match.group(1)
+            chapter_slug = match.group(2)
+            return f"{manga_slug}/{chapter_slug}"
+        
+        # Fallback: try to extract last two parts
+        parts = url.rstrip('/').split('/')
         if len(parts) >= 2:
-            return parts[-1]
+            return f"{parts[-2]}/{parts[-1]}"
+        
         return url.split('/')[-1]
 
     def _extract_title(self, soup) -> str:

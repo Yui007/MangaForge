@@ -26,6 +26,7 @@ providers:
   - mangapark
   - mangabuddy
   - asuracomic
+  - webtoons
   rate_limits:
     default: 1.0
     mock: 0.1

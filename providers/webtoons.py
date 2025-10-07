@@ -33,13 +33,13 @@ class WebtoonsProvider(BaseProvider):
         logger.debug("Webtoons search: query=%s page=%s", query, page)
 
         try:
+            # Use the correct Webtoons search URL format
+            search_url = f"{self.base_url}/en/search/originals"
             params = {
                 "keyword": query,
                 "page": page,
-                "searchType": "WEBTOON",
-                "sortOrder": "POPULAR",
             }
-            response = self.session.get(f"{self.base_url}/en/search", params=params)
+            response = self.session.get(search_url, params=params)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "html.parser")
@@ -104,7 +104,9 @@ class WebtoonsProvider(BaseProvider):
             if not title:
                 raise MangaNotFoundError("Unable to extract title from Webtoons page")
 
-            cover_url = cover_el.get("src") if cover_el and cover_el.get("src") else ""
+            cover_url: str = "https://via.placeholder.com/300x400?text=No+Cover"
+            if cover_el and cover_el.get("src"):
+                cover_url = str(cover_el.get("src"))
             description = self._extract_description(soup)
             authors = self._extract_authors(soup)
             genres = self._extract_genres(soup)
@@ -160,6 +162,7 @@ class WebtoonsProvider(BaseProvider):
 
                 # Make request with retry logic for rate limits
                 max_retries = 3
+                response = None
                 for attempt in range(max_retries):
                     try:
                         response = self.session.get(page_url)
@@ -175,6 +178,9 @@ class WebtoonsProvider(BaseProvider):
                             continue
                         else:
                             raise  # Re-raise if not a rate limit or max retries exceeded
+
+                if response is None:
+                    raise ProviderError("Failed to get response after all retry attempts")
 
                 soup = BeautifulSoup(response.text, "html.parser")
                 episode_items = soup.select("ul#_listUl li._episodeItem")
@@ -283,7 +289,7 @@ class WebtoonsProvider(BaseProvider):
     # ------------------------------------------------------------------
     def get_headers(self) -> Dict[str, str]:
         headers = super().get_headers()
-        headers["User-Agent"] = self._config.network.get("user_agent", headers.get("User-Agent", "")) if hasattr(self._config, "network") else self._config.get("network.user_agent", headers.get("User-Agent", ""))
+        headers["User-Agent"] = self._config.get("network.user_agent", headers.get("User-Agent", ""))
         headers["Referer"] = self.base_url
         return headers
 

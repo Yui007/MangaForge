@@ -38,6 +38,7 @@
 | **MangaPark** 🟢 | ✅ **Fully Working** | Large manga library |
 | **MangaBuddy** 🟢 | ✅ **Fully Working** | Fast and reliable source |
 | **AsuraComic** 🟢 | ✅ **Fully Working** | Premium manga hosting |
+| **Webtoons** 🟢 | ✅ **Fully Working** | Premium webtoon hosting |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -74,7 +75,7 @@ python main.py
 
 ### 3. **Search & Download**
 1. **Search**: Choose "[1] 🔍 Search Manga by Title"
-2. **Select Provider**: Pick from 5 available sources
+2. **Select Provider**: Pick from 6 available sources
 3. **Browse Results**: Navigate paginated results
 4. **Download**: Select chapters and format (CBZ/PDF/Images)
 
@@ -127,7 +128,8 @@ MangaForge/
 │   ├── weebcentral.py  # WeebCentral ✅
 │   ├── mangapark.py    # MangaPark ✅
 │   ├── mangabuddy.py   # MangaBuddy ✅
-│   └── asuracomic.py    # AsuraComic ✅
+│   ├── asuracomic.py   # AsuraComic ✅
+│   └── webtoons.py     # Webtoons ✅
 ├── 🎨 cli/              # Beautiful interface
 ├── ⚙️ config/           # Settings
 └── 📥 downloads/        # Downloaded manga
@@ -237,7 +239,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 5+ (growing) 📈 | 10+ |
+| **Providers** | 6+ (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

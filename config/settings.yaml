@@ -25,6 +25,7 @@ providers:
   - weebcentral
   - mangapark
   - mangabuddy
+  - asuracomic
   rate_limits:
     default: 1.0
     mock: 0.1

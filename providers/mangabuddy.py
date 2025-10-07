@@ -338,7 +338,7 @@ class MangaBuddyProvider(BaseProvider):
                 page.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
 
                 # Wait for images to load
-                page.wait_for_timeout(3000)  # Wait 3 seconds for dynamic content
+                page.wait_for_timeout(5000)  # Wait 3 seconds for dynamic content
 
                 # Extract image URLs using Playwright
                 image_urls = page.evaluate("""

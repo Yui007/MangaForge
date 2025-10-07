@@ -30,9 +30,44 @@ class MangaBuddyProvider(BaseProvider):
     base_url = "https://mangabuddy.com"
 
     def __init__(self):
-        """Initialize the MangaBuddy provider."""
-        super().__init__()
-        logger.info("MangaBuddy provider initialized")
+        """Initialize the MangaBuddy provider with cloudscraper."""
+        # Don't call super().__init__() since we're using cloudscraper
+        import cloudscraper
+
+        self.session = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'mobile': False
+            }
+        )
+
+        # Set headers
+        self.session.headers.update(self.get_headers())
+
+        logger.info("MangaBuddy provider initialized with CloudScraper")
+
+    def download_image(self, url: str) -> bytes:
+        """
+        Download a single image from MangaBuddy (bypasses Cloudflare).
+
+        Args:
+            url: Image URL to download
+
+        Returns:
+            Image data as bytes
+        """
+        try:
+            logger.debug(f"Downloading image with CloudScraper: {url}")
+
+            response = self.session.get(url, timeout=30)
+            response.raise_for_status()
+
+            return response.content
+
+        except Exception as e:
+            logger.error(f"Failed to download image {url}: {e}")
+            raise ProviderError(f"Image download failed: {e}")
 
     def search(self, query: str, page: int = 1) -> Tuple[List[MangaSearchResult], bool]:
         """
@@ -246,7 +281,7 @@ class MangaBuddyProvider(BaseProvider):
 
     def get_chapter_images(self, chapter_id: str) -> List[str]:
         """
-        Get all image URLs for a chapter from MangaBuddy.com.
+        Get all image URLs for a chapter from MangaBuddy.com using Playwright.
 
         Args:
             chapter_id: MangaBuddy chapter ID
@@ -257,31 +292,18 @@ class MangaBuddyProvider(BaseProvider):
         logger.debug(f"Fetching MangaBuddy chapter images for: {chapter_id}")
 
         try:
-            # First get the chapter info to get the correct URL
-            # Since we need to find the manga_id for this chapter
-            # We'll use a more direct approach by constructing the URL properly
-
             # Extract manga_id from chapter_id (format: manga-id/chapter-id)
             if '/' in chapter_id:
                 manga_slug = chapter_id.split('/')[0]
                 chapter_slug = chapter_id.split('/')[-1]
                 chapter_url = f"{self.base_url}/{manga_slug}/{chapter_slug}"
             else:
-                # Fallback: assume chapter_id is just the chapter slug
-                # This shouldn't happen in normal usage since get_chapters provides full URLs
                 chapter_url = f"{self.base_url}/{chapter_id}"
 
             logger.debug(f"Chapter URL: {chapter_url}")
 
-            # Make request
-            response = self.session.get(chapter_url)
-            response.raise_for_status()
-
-            # Parse HTML
-            soup = self._parse_html(response.text)
-
-            # Extract image URLs from JavaScript or HTML
-            image_urls = self._extract_image_urls(soup)
+            # Use Playwright to handle dynamic image loading
+            image_urls = self._get_chapter_images_with_playwright(chapter_url)
 
             if not image_urls:
                 logger.warning(f"No image URLs found for chapter {chapter_id}")
@@ -293,6 +315,88 @@ class MangaBuddyProvider(BaseProvider):
         except Exception as e:
             logger.error(f"MangaBuddy get_chapter_images failed: {e}")
             raise ProviderError(f"Failed to get chapter images: {e}")
+
+    def _get_chapter_images_with_playwright(self, chapter_url: str) -> List[str]:
+        """Use Playwright to extract image URLs from dynamically loaded content."""
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as p:
+                # Use cloudscraper session for browser context to bypass Cloudflare
+                browser = p.chromium.launch(headless=True)
+
+                # Create context with cloudscraper headers
+                context = browser.new_context(
+                    user_agent=self.get_headers().get('User-Agent', ''),
+                    extra_http_headers=self.get_headers()
+                )
+
+                page = context.new_page()
+
+                # Navigate to chapter page
+                logger.debug(f"Navigating to chapter: {chapter_url}")
+                page.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
+
+                # Wait for images to load
+                page.wait_for_timeout(3000)  # Wait 3 seconds for dynamic content
+
+                # Extract image URLs using Playwright
+                image_urls = page.evaluate("""
+                    () => {
+                        const images = [];
+                        // Get images from the chapter-images container
+                        const container = document.querySelector('div.container#chapter-images');
+                        if (container) {
+                            const imgElements = container.querySelectorAll('img');
+                            imgElements.forEach(img => {
+                                const src = img.getAttribute('data-src') || img.getAttribute('src');
+                                if (src && src.includes('mbcdns') && (src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png') || src.endsWith('.gif'))) {
+                                    images.push(src);
+                                }
+                            });
+                        }
+                        return images;
+                    }
+                """)
+
+                browser.close()
+
+                # Clean URLs (remove query parameters)
+                clean_urls = []
+                for url in image_urls:
+                    if url:
+                        clean_url = re.sub(r'\?.*$', '', url)
+                        if clean_url:
+                            clean_urls.append(clean_url)
+
+                logger.debug(f"Playwright extracted {len(clean_urls)} image URLs")
+                return clean_urls
+
+        except ImportError:
+            logger.error("Playwright not available for MangaBuddy image extraction")
+            # Fallback to cloudscraper method
+            return self._get_chapter_images_with_cloudscraper(chapter_url)
+        except Exception as e:
+            logger.error(f"Playwright extraction failed: {e}")
+            # Fallback to cloudscraper method
+            return self._get_chapter_images_with_cloudscraper(chapter_url)
+
+    def _get_chapter_images_with_cloudscraper(self, chapter_url: str) -> List[str]:
+        """Fallback method using cloudscraper for image extraction."""
+        try:
+            # Make request with cloudscraper
+            response = self.session.get(chapter_url)
+            response.raise_for_status()
+
+            # Parse HTML
+            soup = self._parse_html(response.text)
+
+            # Extract image URLs
+            return self._extract_image_urls(soup)
+
+        except Exception as e:
+            logger.error(f"Cloudscraper fallback failed: {e}")
+            return []
 
     def _parse_html(self, html: str):
         """Parse HTML content using BeautifulSoup."""

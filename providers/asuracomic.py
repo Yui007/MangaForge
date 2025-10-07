@@ -118,13 +118,13 @@ class AsuraComicProvider(BaseProvider):
         soup = self._get_soup(target_url)
 
         title = self._extract_title(soup)
-        alt_titles = self._extract_alternative_titles(soup)
+        alt_titles = []  # Remove alternative titles as requested
         cover_url = self._extract_cover_url(soup, target_url)
-        description = self._extract_description(soup)
-        authors = self._extract_metadata_list(soup, ["author"])
-        artists = self._extract_metadata_list(soup, ["artist"])
-        genres = self._extract_metadata_list(soup, ["genre", "category"])
-        status = self._extract_status(soup)
+        description = self._extract_description_new(soup)
+        authors = self._extract_authors(soup)
+        artists = self._extract_artists(soup)
+        genres = self._extract_genres(soup)
+        status = self._extract_status_new(soup)
         year = self._extract_year(soup)
 
         manga_id = manga_id or self._extract_manga_id_from_url(target_url)
@@ -249,53 +249,12 @@ class AsuraComicProvider(BaseProvider):
         return urljoin(self.base_url + "/", f"series/{manga_id}")
 
     def _extract_title(self, soup: BeautifulSoup) -> str:
-        title_element = soup.select_one("h1") or soup.select_one("h2")
+        title_element = soup.select_one("div.text-center.sm\\:text-left span.text-xl.font-bold")
         if title_element:
             return self._clean_text(title_element.get_text())
         raise ProviderError("Unable to determine manga title")
 
-    def _extract_alternative_titles(self, soup: BeautifulSoup) -> List[str]:
-        alternatives: List[str] = []
-        for label in ["alternative", "alt", "other name"]:
-            node = soup.find(
-                lambda tag: tag and getattr(tag, "text", None) and label in tag.get_text(strip=True).lower()
-            )
-            if node:
-                parent = node.parent if node.parent else node
-                texts = [self._clean_text(item.get_text()) for item in parent.find_all("span")]
-                for text in texts:
-                    if label not in text.lower() and text not in alternatives and text:
-                        alternatives.append(text)
-                if alternatives:
-                    break
-        return alternatives
 
-    def _extract_description(self, soup: BeautifulSoup) -> str:
-        description_selectors = [
-            "div#synopsis",
-            "div#summary",
-            "div.summary",
-            "div.synopsis",
-            "div.description",
-            "div.manga-summary",
-            "div.prose",
-        ]
-        for selector in description_selectors:
-            element = soup.select_one(selector)
-            if element:
-                text = element.get_text("\n", strip=True)
-                if text:
-                    return text
-        heading = soup.find(
-            lambda tag: tag and tag.name in {"h2", "h3"} and "synopsis" in tag.get_text(strip=True).lower()
-        )
-        if heading:
-            next_para = heading.find_next("p")
-            if next_para:
-                text = next_para.get_text("\n", strip=True)
-                if text:
-                    return text
-        return ""
 
     def _extract_cover_url(self, soup: BeautifulSoup, base: str) -> str:
         candidates = [
@@ -307,6 +266,45 @@ class AsuraComicProvider(BaseProvider):
             if candidate and candidate.has_attr("src"):
                 return self._normalize_url(candidate["src"], base)
         return ""
+
+    def _extract_authors(self, soup: BeautifulSoup) -> List[str]:
+        author_element = soup.select_one("div:has(h3:contains('Author')) h3.text-sm.text-\\[\\#A2A2A2\\]")
+        if author_element:
+            return [self._clean_text(author_element.get_text())]
+        return []
+
+    def _extract_artists(self, soup: BeautifulSoup) -> List[str]:
+        artist_element = soup.select_one("div:has(h3:contains('Artist')) h3.text-sm.text-\\[\\#A2A2A2\\]")
+        if artist_element:
+            return [self._clean_text(artist_element.get_text())]
+        return []
+
+    def _extract_genres(self, soup: BeautifulSoup) -> List[str]:
+        genres = []
+        genre_buttons = soup.select("div:has(h3:contains('Genres')) button.bg-\\[\\#343434\\]")
+        for button in genre_buttons:
+            genre_text = self._clean_text(button.get_text())
+            if genre_text:
+                genres.append(genre_text)
+        return genres
+
+    def _extract_status(self, soup: BeautifulSoup) -> str:
+        status_element = soup.select_one("div:has(h3:contains('Status')) h3.text-sm.text-\\[\\#A2A2A2\\].capitalize")
+        if status_element:
+            return self._clean_text(status_element.get_text()).capitalize()
+        return "Unknown"
+
+    def _extract_description_new(self, soup: BeautifulSoup) -> str:
+        desc_element = soup.select_one("span.font-medium.text-sm.text-\\[\\#A2A2A2\\] p")
+        if desc_element:
+            return self._clean_text(desc_element.get_text())
+        return ""
+
+    def _extract_status_new(self, soup: BeautifulSoup) -> str:
+        status_element = soup.select_one("div:has(h3:contains('Status')) h3.text-sm.text-\\[\\#A2A2A2\\].capitalize")
+        if status_element:
+            return self._clean_text(status_element.get_text()).capitalize()
+        return "Unknown"
 
     def _extract_metadata_list(self, soup: BeautifulSoup, labels: List[str]) -> List[str]:
         for label in labels:
@@ -328,13 +326,6 @@ class AsuraComicProvider(BaseProvider):
                 return items
         return []
 
-    def _extract_status(self, soup: BeautifulSoup) -> str:
-        candidates = self._extract_metadata_list(soup, ["status"])
-        if candidates:
-            status = candidates[0]
-            if status:
-                return status.capitalize()
-        return "Unknown"
 
     def _extract_year(self, soup: BeautifulSoup) -> Optional[int]:
         text_sources = self._extract_metadata_list(soup, ["year", "released", "published"])

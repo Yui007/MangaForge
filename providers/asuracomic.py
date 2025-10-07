@@ -151,7 +151,7 @@ class AsuraComicProvider(BaseProvider):
         target_url = self._build_manga_url(manga_id)
         soup = self._get_soup(target_url)
 
-        chapter_elements = soup.select("div.pl-4.py-2.border.rounded-md")
+        chapter_elements = soup.select("div.pl-4.py-2.border.rounded-md.group.w-full.hover\\:bg-\\[\\#343434\\].cursor-pointer.border-\\[\\#A2A2A2\\]\\/20.relative")
         if not chapter_elements:
             raise ChapterNotFoundError("No chapters found")
 
@@ -162,11 +162,12 @@ class AsuraComicProvider(BaseProvider):
                 continue
 
             chapter_url = self._normalize_url(link["href"])
-            title = self._clean_text(link.get_text())
+            title_h3 = element.select_one("h3.text-sm.text-white.font-medium")
+            title = self._clean_text(title_h3.get_text()) if title_h3 else self._clean_text(link.get_text())
             chapter_id = chapter_url
             chapter_number = self._extract_chapter_number(title)
             volume = self._extract_volume(title)
-            release_date = self._extract_chapter_date(element)
+            release_date = self._extract_chapter_date_new(element)
 
             chapters.append(
                 Chapter(
@@ -365,15 +366,12 @@ class AsuraComicProvider(BaseProvider):
             return match.group(1)
         return None
 
-    def _extract_chapter_date(self, element) -> Optional[str]:
-        date_element = element.find(
-            lambda tag: tag and tag.name in {"span", "div"} and tag.get_text(strip=True)
-        )
-        if not date_element:
-            return None
-        text = self._clean_text(date_element.get_text())
-        if text and any(keyword in text.lower() for keyword in ["ago", "202", "201", "yesterday", "today"]):
-            return text
+    def _extract_chapter_date_new(self, element) -> Optional[str]:
+        date_element = element.select_one("h3.text-xs.text-\\[\\#A2A2A2\\]")
+        if date_element:
+            text = self._clean_text(date_element.get_text())
+            if text and any(keyword in text.lower() for keyword in ["ago", "202", "201", "yesterday", "today"]):
+                return text
         return None
 
     def _normalize_url(self, url: str, base: Optional[str] = None) -> str:

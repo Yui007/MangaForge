@@ -268,15 +268,27 @@ class AsuraComicProvider(BaseProvider):
         return ""
 
     def _extract_authors(self, soup: BeautifulSoup) -> List[str]:
-        author_element = soup.select_one("div:has(h3:contains('Author')) h3.text-sm.text-\\[\\#A2A2A2\\]")
-        if author_element:
-            return [self._clean_text(author_element.get_text())]
+        # Find all h3 elements with the specific color class
+        h3_elements = soup.select("h3.text-sm.text-\\[\\#A2A2A2\\]")
+        for h3 in h3_elements:
+            # Check if this h3 contains "Author" in its parent structure
+            parent_div = h3.find_parent("div")
+            if parent_div:
+                author_label = parent_div.select_one("h3.text-\\[\\#D9D9D9\\]")
+                if author_label and "Author" in author_label.get_text():
+                    return [self._clean_text(h3.get_text())]
         return []
 
     def _extract_artists(self, soup: BeautifulSoup) -> List[str]:
-        artist_element = soup.select_one("div:has(h3:contains('Artist')) h3.text-sm.text-\\[\\#A2A2A2\\]")
-        if artist_element:
-            return [self._clean_text(artist_element.get_text())]
+        # Find all h3 elements with the specific color class
+        h3_elements = soup.select("h3.text-sm.text-\\[\\#A2A2A2\\]")
+        for h3 in h3_elements:
+            # Check if this h3 contains "Artist" in its parent structure
+            parent_div = h3.find_parent("div")
+            if parent_div:
+                artist_label = parent_div.select_one("h3.text-\\[\\#D9D9D9\\]")
+                if artist_label and "Artist" in artist_label.get_text():
+                    return [self._clean_text(h3.get_text())]
         return []
 
     def _extract_genres(self, soup: BeautifulSoup) -> List[str]:

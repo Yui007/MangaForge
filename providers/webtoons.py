@@ -144,8 +144,37 @@ class WebtoonsProvider(BaseProvider):
         try:
             while True:
                 page_url = self._build_page_url(target_url, page)
-                response = self.session.get(page_url)
-                response.raise_for_status()
+
+                # Add rate limiting to avoid 429 errors
+                import time
+                import random
+
+                # Progressive delay: increase delay as we go through more pages
+                base_delay = 1.0
+                progressive_delay = base_delay + (page * 0.5)  # Increase delay per page
+                jitter = random.uniform(0.5, 1.5)  # Add randomness to appear more human-like
+                total_delay = progressive_delay * jitter
+
+                logger.debug("Waiting %.2fs before requesting page %s", total_delay, page)
+                time.sleep(total_delay)
+
+                # Make request with retry logic for rate limits
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        response = self.session.get(page_url)
+                        response.raise_for_status()
+                        break  # Success, exit retry loop
+
+                    except Exception as e:
+                        if "429" in str(e) and attempt < max_retries - 1:
+                            # Rate limited, wait longer and retry
+                            retry_delay = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
+                            logger.warning("Rate limited on page %s, attempt %s. Waiting %ss before retry.", page, attempt + 1, retry_delay)
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            raise  # Re-raise if not a rate limit or max retries exceeded
 
                 soup = BeautifulSoup(response.text, "html.parser")
                 episode_items = soup.select("ul#_listUl li._episodeItem")

@@ -211,16 +211,43 @@ class AsuraComicProvider(BaseProvider):
         logger.debug("Fetching AsuraComic chapter images: %s", chapter_url)
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=True)
             page_obj = browser.new_page()
             try:
-                page_obj.goto(chapter_url, wait_until="networkidle", timeout=self._page_timeout_ms)
-                page_obj.wait_for_selector("img.object-cover.mx-auto", timeout=10000)
+                # Use the superior loading strategy from improved test.py
+                page_obj.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
+
+                # Wait briefly to allow dynamic images to appear
+                page_obj.wait_for_timeout(4000)
+
+                # Manually stop page loading (in case it's looping)
+                try:
+                    page_obj.evaluate("window.stop();")
+                except:
+                    pass
+
+                # Use the working selector from test.py
                 image_urls = page_obj.eval_on_selector_all(
-                    "img.object-cover.mx-auto",
+                    "div.center img",
                     "elements => elements.map(el => el.src)",
                 )
-                return [self._normalize_url(url) for url in image_urls if url]
+
+                # Filter out unwanted images and normalize URLs
+                filtered_urls = []
+                for url in image_urls:
+                    if url and "EndDesign" not in url:
+                        # Handle different URL formats like in test.py
+                        if url.startswith("//"):
+                            normalized_url = "https:" + url
+                        elif url.startswith("/"):
+                            normalized_url = "https://asuracomic.net" + url
+                        else:
+                            normalized_url = url
+                        filtered_urls.append(normalized_url)
+
+                logger.debug("Found %d chapter images", len(filtered_urls))
+                return filtered_urls
+
             except (PlaywrightTimeoutError, PlaywrightError) as exc:
                 logger.error("Failed to fetch images for %s: %s", chapter_url, exc)
                 raise ProviderError(f"Failed to fetch chapter images: {exc}") from exc

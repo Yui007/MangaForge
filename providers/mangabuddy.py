@@ -83,12 +83,13 @@ class MangaBuddyProvider(BaseProvider):
         logger.debug(f"Searching MangaBuddy for '{query}' on page {page}")
 
         try:
-            # Build search URL
-            search_url = f"{self.base_url}/search"
-            params = {
-                'q': query,
-                'page': page
-            }
+            # Build search URL - MangaBuddy uses different URL structure
+            if page == 1:
+                search_url = f"{self.base_url}/search"
+                params = {'q': query}
+            else:
+                search_url = f"{self.base_url}/search"
+                params = {'q': query, 'page': page}
 
             # Make request
             response = self.session.get(search_url, params=params)
@@ -97,18 +98,20 @@ class MangaBuddyProvider(BaseProvider):
             # Parse HTML
             soup = self._parse_html(response.text)
 
-            # Extract search results
+            # Extract search results using correct MangaBuddy selectors
             results = []
             seen_urls = set()
 
-            # Find all manga items in search results
-            manga_items = soup.find_all('div', class_='manga-item')
+            # Find all manga items in search results using correct selector
+            book_items = soup.find_all('div', class_='book-item')
 
-            for item in manga_items:
-                title_element = item.find('a', class_='manga-title')
+            for item in book_items:
+                # Extract title using correct selector
+                title_element = item.select_one('.title h3 a')
                 if title_element:
                     title = title_element.text.strip()
-                    url = urljoin(self.base_url, title_element['href'])
+                    href = title_element['href']
+                    url = f"https://mangabuddy.com{href}"
 
                     # Avoid duplicates
                     if url not in seen_urls:
@@ -126,7 +129,7 @@ class MangaBuddyProvider(BaseProvider):
                         )
                         results.append(result)
 
-            # Check if there's a next page
+            # Check if there's a next page using MangaBuddy pagination
             has_next = self._has_next_page(soup, page)
 
             logger.info(f"MangaBuddy search returned {len(results)} results")
@@ -642,20 +645,26 @@ class MangaBuddyProvider(BaseProvider):
         return image_urls
 
     def _has_next_page(self, soup, current_page: int) -> bool:
-        """Check if there's a next page in search results."""
-        # Look for pagination elements
+        """Check if there's a next page in MangaBuddy search results."""
+        # Look for MangaBuddy-specific pagination elements
         pagination_selectors = [
             '.pagination .next',
             'a[href*="page"]',
-            '.pager .next'
+            '.pager .next',
+            '.page-nav',  # MangaBuddy specific
+            'nav[class*="pagination"]'  # Generic pagination nav
         ]
 
         for selector in pagination_selectors:
             next_element = soup.select_one(selector)
             if next_element:
-                return True
+                # Check if the element has a href or data attributes indicating next page
+                if next_element.get('href') or next_element.get('data-page'):
+                    return True
 
-        return False
+        # Alternative: check if current page has results (if no results, likely no next page)
+        result_items = soup.find_all('div', class_='book-item')
+        return len(result_items) > 0
 
     def get_headers(self) -> dict:
         """Override headers for MangaBuddy-specific requirements."""

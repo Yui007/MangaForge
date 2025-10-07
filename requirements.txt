@@ -2,23 +2,26 @@
 # Install with: pip install -r requirements.txt
 
 # Core dependencies
-PyYAML>=6.0          # Configuration file support
-httpx>=0.24.0        # Modern HTTP client
-beautifulsoup4>=4.12 # HTML parsing
-lxml>=4.9.0          # Fast XML/HTML parsing
+PyYAML          # Configuration file support
+httpx        # Modern HTTP client
+beautifulsoup4 # HTML parsing
+lxml          # Fast XML/HTML parsing
 
 # Image processing and conversion
-Pillow>=10.0.0       # Image processing for PDF conversion
-reportlab>=4.0.0     # PDF generation
+Pillow       # Image processing for PDF conversion
+reportlab     # PDF generation
 
 # Type hints and development
-typing-extensions>=4.0.0  # For older Python versions
+typing-extensions  # For older Python versions
 
 # CLI dependencies (Phase 2)
-rich>=13.0.0        # Beautiful terminal output
-typer>=0.9.0        # CLI framework
-questionary>=2.0.0  # Interactive prompts
+rich        # Beautiful terminal output
+typer        # CLI framework
+questionary  # Interactive prompts
 
 # Optional: For JavaScript-heavy sites (if needed)
-# selenium>=4.15.0    # Browser automation
-# playwright>=1.40.0  # Modern browser automation
+selenium    # Browser automation
+playwright  # Modern browser automation (required for MangaPark)
+
+# Cloudflare bypass for protected sites
+cloudscraper  # Cloudflare protection bypass (required for MangaBuddy)

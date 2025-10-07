@@ -34,9 +34,9 @@
 | Provider | Status | Description |
 |:---:|:---:|:---:|
 | **Bato** 🟢 | ✅ **Fully Working** | Popular manga hosting with clean interface |
-| **WeebCentral** 🟢 | ✅ **Working** | High-quality manga scans |
-| **MangaPark** 🟢 | ✅ **Working** | Large manga library |
-| **MangaBuddy** 🟢 | ✅ **Working** | Fast and reliable source |
+| **WeebCentral** 🟢 | ✅ **Fully Working** | High-quality manga scans |
+| **MangaPark** 🟢 | ✅ **Fully Working** | Large manga library |
+| **MangaBuddy** 🟢 | ✅ **Fully Working** | Fast and reliable source |
 | **AsuraComic** 🟢 | ✅ **Fully Working** | Premium manga hosting |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**

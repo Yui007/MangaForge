@@ -161,7 +161,26 @@ class AsuraComicProvider(BaseProvider):
             if not link:
                 continue
 
-            chapter_url = self._normalize_url(link["href"])
+            chapter_href = link["href"]
+            
+            # DEBUG: Log what we're getting
+            logger.debug(f"Raw chapter_href: {chapter_href}")
+            logger.debug(f"manga_id: {manga_id}")
+            
+            # Extract just the chapter number part from the href
+            # Expected href format: "series/manga-id/chapter/1" or "/series/manga-id/chapter/1"
+            if "/chapter/" in chapter_href:
+                # Extract the chapter part (e.g., "chapter/1")
+                chapter_part = chapter_href.split("/chapter/")[-1]
+                chapter_url = f"{self.base_url}/series/{manga_id}/chapter/{chapter_part}"
+            elif chapter_href.startswith("http"):
+                chapter_url = chapter_href
+            else:
+                # Fallback
+                chapter_url = self._normalize_url(chapter_href)
+            
+            logger.debug(f"Constructed chapter_url: {chapter_url}")
+            
             title_h3 = element.select_one("h3.text-sm.text-white.font-medium")
             title = self._clean_text(title_h3.get_text()) if title_h3 else self._clean_text(link.get_text())
             chapter_id = chapter_url
@@ -192,7 +211,7 @@ class AsuraComicProvider(BaseProvider):
         logger.debug("Fetching AsuraComic chapter images: %s", chapter_url)
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=False)
             page_obj = browser.new_page()
             try:
                 page_obj.goto(chapter_url, wait_until="networkidle", timeout=self._page_timeout_ms)

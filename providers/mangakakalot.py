@@ -60,11 +60,15 @@ class MangakakalotProvider(BaseProvider):
         if not query.strip():
             return [], False
 
+        # Use the same search URL pattern as Bato but adapted for MangaKakalot
         search_slug = re.sub(r"\s+", "_", query.strip())
         search_url = f"{self.base_url}/search/story/{search_slug}"
-        params = {"page": page} if page > 1 else None
 
-        soup = self._fetch_soup(search_url, params=params)
+        # Add page parameter if not first page
+        if page > 1:
+            search_url += f"?page={page}"
+
+        soup = self._fetch_soup(search_url)
 
         results: List[MangaSearchResult] = []
         seen_urls = set()
@@ -95,6 +99,7 @@ class MangakakalotProvider(BaseProvider):
             )
             results.append(result)
 
+        # Check for pagination properly - MangaKakalot uses different pagination structure
         has_next = self._has_next_page(soup)
         logger.info("MangaKakalot search returned %d results (has_next=%s)", len(results), has_next)
         return results, has_next
@@ -433,15 +438,55 @@ class MangakakalotProvider(BaseProvider):
                 items.append(item)
         return items
 
-    def _has_next_page(self, soup: BeautifulSoup) -> bool:
-        next_link = soup.select_one("a.page_next, a.next, .pagination a[rel='next']")
-        if next_link:
-            return True
-        for anchor in soup.select(".pagination a, a"):
-            text = anchor.get_text(strip=True).lower()
-            if text in {"next", ">", ">>", "more"}:
+    def _has_next_page(self, soup: BeautifulSoup, current_page: int = 1) -> bool:
+        """
+        Check if there's a next page in MangaKakalot search results.
+
+        Args:
+            soup: BeautifulSoup object of the search page
+            current_page: Current page number (for context)
+
+        Returns:
+            True if there's a next page, False otherwise
+        """
+        # Look for pagination elements specific to MangaKakalot
+        pagination_selectors = [
+            ".pagination .next",
+            ".pagination a[href*='page']",
+            "a[href*='?page=']",
+            ".page-nav .next",
+            ".pager .next"
+        ]
+
+        for selector in pagination_selectors:
+            next_element = soup.select_one(selector)
+            if next_element:
                 return True
-        return False
+
+        # Check for page number links that indicate more pages exist
+        page_links = soup.select(".pagination a, .page-nav a, a[href*='page=']")
+        for link in page_links:
+            href = link.get("href", "")
+            if "?page=" in href or "/page/" in href:
+                # Try to extract page number
+                page_match = re.search(r'[?&]page=(\d+)', href)
+                if page_match:
+                    try:
+                        page_num = int(page_match.group(1))
+                        if page_num > current_page:
+                            return True
+                    except ValueError:
+                        continue
+
+        # Check for "Next" text in any link
+        for anchor in soup.select("a"):
+            text = anchor.get_text(strip=True).lower()
+            if text in {"next", ">", ">>", "more", "next page"}:
+                return True
+
+        # Check if current page has results (if no results, likely no next page)
+        result_items = soup.select("div.story_item")
+        return len(result_items) > 0
 
     def download_image(self, url: str) -> bytes:
         """

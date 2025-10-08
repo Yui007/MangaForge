@@ -42,6 +42,7 @@
 | **MangaKakalot** 🟢 | ✅ **Fully Working** | Large manga library |
 | **VyManga** 🟢 | ✅ **Fully Working** | Premium manga and webtoon hosting |
 | **Toonily** 🟢 | ✅ **Fully Working** | SFW/NSFW webtoon and Manhwa hosting |
+| **KaliScan** 🟢 | ✅ **Fully Working** | High-quality manga hosting with modern interface |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -135,7 +136,8 @@ MangaForge/
 │   ├── webtoons.py     # Webtoons ✅
 │   ├── mangakakalot.py # MangaKakalot ✅
 │   ├── vymanga.py      # VyManga ✅
-│   └── toonily.py      # Toonily ✅
+│   ├── toonily.py      # Toonily ✅
+│   └── kaliscan.py     # KaliScan ✅
 ├── 🎨 cli/              # Beautiful interface
 ├── ⚙️ config/           # Settings
 └── 📥 downloads/        # Downloaded manga
@@ -245,7 +247,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 9+ (growing) 📈 | 10+ |
+| **Providers** | 10+ (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

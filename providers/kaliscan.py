@@ -293,10 +293,23 @@ class KaliscanProvider(BaseProvider):
         if not anchor:
             return None
         chapter_url = urljoin(self.base_url, anchor["href"])
-        title_text = anchor.get_text(" ", strip=True)
-        chapter_number = self._extract_chapter_number(title_text) or title_text
-        time_node = anchor.find("time", class_="chapter-update")
+
+        # Extract chapter number from li id attribute (e.g., "c-27" -> "27")
+        chapter_id_from_li = item.get("id")
+        if chapter_id_from_li and chapter_id_from_li.startswith("c-"):
+            chapter_number = chapter_id_from_li[2:]  # Remove "c-" prefix
+        else:
+            # Fallback to extracting from title text
+            title_text = anchor.get_text(" ", strip=True)
+            chapter_number = self._extract_chapter_number(title_text) or title_text
+
+        # Extract title from strong.chapter-title element
+        title_element = item.select_one("strong.chapter-title")
+        title_text = title_element.get_text(strip=True) if title_element else anchor.get_text(" ", strip=True)
+
+        time_node = item.find("time", class_="chapter-update")
         release_date = time_node.get_text(strip=True) if time_node else None
+
         slug = self._extract_chapter_id_from_url(anchor["href"])
         return Chapter(
             chapter_id=slug,

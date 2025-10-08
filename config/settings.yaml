@@ -27,6 +27,8 @@ providers:
   - mangabuddy
   - asuracomic
   - webtoons
+  - toonily
+  - mangakakalot
   rate_limits:
     default: 1.0
     mock: 0.1

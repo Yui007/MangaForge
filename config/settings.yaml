@@ -30,6 +30,7 @@ providers:
   - toonily
   - mangakakalot
   - vymanga
+  - kaliscan
   rate_limits:
     default: 1.0
     mock: 0.1

@@ -1,5 +1,6 @@
 """KaliScan provider implementation for MangaForge."""
 
+import asyncio
 import logging
 import re
 import time
@@ -8,6 +9,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from core.base_provider import (
     BaseProvider,
@@ -136,39 +138,18 @@ class KaliscanProvider(BaseProvider):
 
     def get_chapter_images(self, chapter_id: str) -> List[str]:
         chapter_url = self._normalise_chapter_url(chapter_id)
-        logger.debug("Fetching Kaliscan chapter images for %s", chapter_url)
+        logger.debug("Fetching Kaliscan chapter images using Playwright for %s", chapter_url)
+
+        # Use the same approach as MangaKakalot for handling asyncio event loops
         try:
-            response = self._get(chapter_url)
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                raise ChapterNotFoundError(f"Chapter not found: {chapter_id}") from exc
-            raise ProviderError(f"Failed to fetch chapter page: {exc}") from exc
-        html = response.text
-        chapter_numeric_id = self._extract_chapter_numeric_id(html)
-        if not chapter_numeric_id:
-            raise ProviderError("Failed to locate internal chapter ID")
-        soup = self._parse_html(html)
-        server_ids = self._extract_server_ids(soup)
-        errors: List[str] = []
-        for server_id in server_ids:
-            try:
-                images = self._fetch_chapter_images_from_server(
-                    chapter_numeric_id, server_id, chapter_url
-                )
-            except ProviderError as exc:
-                errors.append(str(exc))
-                continue
-            if images:
-                logger.debug(
-                    "Server %s returned %s images for chapter %s",
-                    server_id,
-                    len(images),
-                    chapter_id,
-                )
-                return images
-        if errors:
-            raise ProviderError("; ".join(errors))
-        raise ProviderError("No images found for chapter")
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                logger.warning("Asyncio event loop already running, cannot use Playwright")
+                return []
+            else:
+                return loop.run_until_complete(self._extract_images_playwright(chapter_url))
+        except RuntimeError:
+            return asyncio.run(self._extract_images_playwright(chapter_url))
 
     def _fetch_chapter_images_from_server(
         self, chapter_numeric_id: str, server_id: str, chapter_url: str
@@ -196,6 +177,75 @@ class KaliscanProvider(BaseProvider):
             if url:
                 image_urls.append(urljoin(self.base_url, url))
         return image_urls
+
+    async def _extract_images_playwright(self, chapter_url: str) -> List[str]:
+        """Extract image URLs using Playwright to handle dynamic loading."""
+        logger.debug("Using Playwright to extract images from %s", chapter_url)
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent=self.config.get("network.user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+                viewport={"width": 1280, "height": 800}
+            )
+
+            page = await context.new_page()
+
+            try:
+                # Navigate to chapter URL
+                await page.goto(chapter_url, wait_until="domcontentloaded", timeout=60000)
+
+                # Handle the warning accept button if it appears (KaliScan specific)
+                try:
+                    await page.wait_for_selector("button.btn.btn-warning", timeout=10000)
+                    await page.click("button.btn.btn-warning")
+                    await page.wait_for_load_state("networkidle")
+                    logger.info("Clicked Accept button on KaliScan chapter page")
+                except Exception:
+                    logger.debug("No warning button found on KaliScan chapter page, continuing...")
+
+                # Wait for chapter images to be present and ensure they have started loading
+                try:
+                    await page.wait_for_function("""
+                        () => {
+                            const images = document.querySelectorAll('div.chapter-image img');
+                            return Array.from(images).some(img => img.src && img.src.length > 0);
+                        }
+                    """, timeout=20000)
+                    logger.debug("At least one chapter image has a non-empty src attribute.")
+                except Exception:
+                    logger.warning("Timed out waiting for images to have a src attribute. Scraping may fail.")
+
+                # Extract image URLs from div.chapter-image elements
+                image_divs = await page.query_selector_all("div.chapter-image")
+                if not image_divs:
+                    raise ProviderError(f"Unable to locate page images for chapter {chapter_url}")
+
+                image_urls: List[str] = []
+                for i, div in enumerate(image_divs, start=1):
+                    # Try data-src first (lazy loading)
+                    img_url = await div.get_attribute("data-src")
+                    if not img_url:
+                        # Fallback to src attribute
+                        img_tag = await div.query_selector("img")
+                        if img_tag:
+                            img_url = await img_tag.get_attribute("src")
+
+                    if img_url:
+                        # Ensure absolute URL
+                        if not img_url.startswith("http"):
+                            img_url = urljoin(self.base_url, img_url)
+                        image_urls.append(img_url)
+                    else:
+                        logger.warning("Could not extract image URL for page %d in chapter %s", i, chapter_url)
+
+                logger.info("Extracted %d image URLs from KaliScan chapter", len(image_urls))
+                return image_urls
+
+            finally:
+                await page.close()
+                await context.close()
+                await browser.close()
 
     def _fetch_chapter_list_via_api(
         self, manga_id: str, referer: str

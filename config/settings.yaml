@@ -29,6 +29,7 @@ providers:
   - webtoons
   - toonily
   - mangakakalot
+  - vymanga
   rate_limits:
     default: 1.0
     mock: 0.1

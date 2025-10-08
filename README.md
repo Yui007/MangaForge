@@ -43,6 +43,7 @@
 | **VyManga** 🟢 | ✅ **Fully Working** | Premium manga and webtoon hosting |
 | **Toonily** 🟢 | ✅ **Fully Working** | SFW/NSFW webtoon and Manhwa hosting |
 | **KaliScan** 🟢 | ✅ **Fully Working** | High-quality manga hosting with modern interface |
+| **ManhuaScan** 🟢 | ✅ **Fully Working** | Rich manhua Library hosting |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -79,7 +80,7 @@ python main.py
 
 ### 3. **Search & Download**
 1. **Search**: Choose "[1] 🔍 Search Manga by Title"
-2. **Select Provider**: Pick from 9 available sources
+2. **Select Provider**: Pick from 11 available sources
 3. **Browse Results**: Navigate paginated results
 4. **Download**: Select chapters and format (CBZ/PDF/Images)
 
@@ -137,7 +138,8 @@ MangaForge/
 │   ├── mangakakalot.py # MangaKakalot ✅
 │   ├── vymanga.py      # VyManga ✅
 │   ├── toonily.py      # Toonily ✅
-│   └── kaliscan.py     # KaliScan ✅
+│   ├── kaliscan.py     # KaliScan ✅
+│   └── manhuascan.py   # ManhuaScan ✅
 ├── 🎨 cli/              # Beautiful interface
 ├── ⚙️ config/           # Settings
 └── 📥 downloads/        # Downloaded manga
@@ -247,7 +249,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 10+ (growing) 📈 | 10+ |
+| **Providers** | 11+ (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

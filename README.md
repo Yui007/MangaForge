@@ -33,9 +33,9 @@
 
 | Provider | Status | Description |
 |:---:|:---:|:---:|
-| **Bato** 🟢 | ✅ **Fully Working** | Popular manga hosting with clean interface |
+| **Bato** � | ⛔ **Site Taken Down** | Site has been permanently shut down |
 | **WeebCentral** 🟢 | ✅ **Fully Working** | High-quality manga scans |
-| **MangaPark** 🟢 | ✅ **Fully Working** | Large manga library |
+| **MangaPark** � | ⛔ **Site Taken Down** | Site has been permanently shut down |
 | **MangaBuddy** 🟢 | ✅ **Fully Working** | Fast and reliable source |
 | **AsuraComic** 🟢 | ✅ **Fully Working** | Premium manga hosting |
 | **WebToons** 🟢 | ✅ **Fully Working** | Premium webtoon hosting |
@@ -129,9 +129,9 @@ MangaForge/
 │   └── config.py         # Settings management
 ├── 📊 models/           # Data structures
 ├── 🔌 providers/        # Plugin providers
-│   ├── bato.py         # Bato provider ✅
+│   ├── bato.py         # Bato provider ⛔ (site taken down)
 │   ├── weebcentral.py  # WeebCentral ✅
-│   ├── mangapark.py    # MangaPark ✅
+│   ├── mangapark.py    # MangaPark ⛔ (site taken down)
 │   ├── mangabuddy.py   # MangaBuddy ✅
 │   ├── asuracomic.py   # AsuraComic ✅
 │   ├── webtoons.py     # Webtoons ✅
@@ -249,7 +249,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 11+ (growing) 📈 | 10+ |
+| **Providers** | 9 active (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

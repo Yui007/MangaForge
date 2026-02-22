@@ -215,87 +215,108 @@ class MangaBuddyProvider(BaseProvider):
             logger.error(f"MangaBuddy get_manga_info failed: {e}")
             raise ProviderError(f"Failed to get manga info: {e}")
 
-    def get_chapters(self, manga_id: str) -> List[Chapter]:
+    def _extract_book_id(self, manga_id: str) -> str:
+        """Extract numeric bookId from the manga page's <script> tag.
+
+        Looks for: var bookId = 71459;
         """
-        Get all chapters for a manga from MangaBuddy.com.
+        manga_url = f"{self.base_url}/{manga_id}"
+        response = self.session.get(manga_url)
+        response.raise_for_status()
 
-        Args:
-            manga_id: MangaBuddy manga ID
+        match = re.search(r'var\s+bookId\s*=\s*(\d+)', response.text)
+        if not match:
+            raise ProviderError(
+                f"Could not find bookId on manga page: {manga_url}"
+            )
+        return match.group(1)
 
-        Returns:
-            List of Chapter objects in reading order
+    def get_chapters(self, manga_id: str) -> List[Chapter]:
+        """Fetch all chapters via the MangaBuddy chapters API.
+
+        Steps:
+            1. Load the manga page to extract the numeric bookId
+            2. Call /api/manga/{bookId}/chapters?source=detail
+            3. Parse the returned HTML fragment for chapter links
         """
         logger.debug(f"Fetching MangaBuddy chapters for: {manga_id}")
 
         try:
-            # Build manga URL
-            manga_url = f"{self.base_url}/{manga_id}"
+            # Step 1: get numeric bookId from manga page
+            book_id = self._extract_book_id(manga_id)
+            logger.debug(f"MangaBuddy bookId={book_id} for slug={manga_id}")
 
-            # Make request to manga page
-            response = self.session.get(manga_url)
+            # Step 2: call chapters API
+            api_url = f"{self.base_url}/api/manga/{book_id}/chapters?source=detail"
+            response = self.session.get(api_url)
             response.raise_for_status()
 
-            # Parse HTML
+            # Step 3: parse the HTML fragment returned by the API
             soup = self._parse_html(response.text)
+            chapters: List[Chapter] = []
 
-            # Extract chapters using MangaBuddy-specific selectors
-            chapters = []
-            chapter_list_ul = soup.find('ul', class_='chapter-list')
+            for li in soup.select('li'):
+                link = li.select_one('a[href]')
+                if not link:
+                    continue
 
-            if chapter_list_ul:
-                for li in chapter_list_ul.find_all('li'):
-                    chapter_a = li.find('a', href=True)
-                    if chapter_a:
-                        chapter_title_element = chapter_a.find('strong', class_='chapter-title')
-                        chapter_title = chapter_title_element.text.strip() if chapter_title_element else "Unknown Chapter"
+                href = link.get('href', '')
+                chapter_url = urljoin(self.base_url, str(href))
 
-                        chapter_url = urljoin(self.base_url, chapter_a['href'])
+                # Title from <strong class="chapter-title"> or link text
+                title_el = link.select_one('strong.chapter-title')
+                chapter_title = (
+                    title_el.get_text(strip=True)
+                    if title_el
+                    else link.get_text(strip=True)
+                ) or "Unknown Chapter"
 
-                        # Extract chapter information
-                        chapter_id = self._extract_chapter_id_from_url(chapter_url)
-                        chapter_number = self._extract_chapter_number(chapter_title)
-                        volume = self._extract_volume(chapter_title)
+                # Release date from <time class="chapter-update">
+                date_el = link.select_one('time.chapter-update')
+                release_date = (
+                    date_el.get_text(strip=True) if date_el else None
+                )
 
-                        # Extract release date using MangaBuddy-specific time selector
-                        release_date_element = chapter_a.find('time', class_='chapter-update')
-                        release_date = release_date_element.text.strip() if release_date_element else None
+                chapter_id = self._extract_chapter_id_from_url(chapter_url)
+                chapter_number = self._extract_chapter_number(chapter_title)
+                volume = self._extract_volume(chapter_title)
 
-                        chapter = Chapter(
-                            chapter_id=chapter_id,
-                            manga_id=manga_id,
-                            title=chapter_title,
-                            chapter_number=chapter_number,
-                            volume=volume,
-                            url=chapter_url,
-                            release_date=release_date,
-                            language="en"
-                        )
-                        chapters.append(chapter)
+                chapters.append(
+                    Chapter(
+                        chapter_id=chapter_id,
+                        manga_id=manga_id,
+                        title=chapter_title,
+                        chapter_number=chapter_number,
+                        volume=volume,
+                        url=chapter_url,
+                        release_date=release_date,
+                        language="en",
+                    )
+                )
 
-            # MangaBuddy chapters are usually listed in descending order, reverse to get ascending
+            # API returns newest first; reverse so oldest is first
             chapters.reverse()
 
-            logger.info(f"Extracted {len(chapters)} chapters from MangaBuddy")
+            logger.info(f"MangaBuddy API returned {len(chapters)} chapters")
             return chapters
 
+        except ProviderError:
+            raise
         except Exception as e:
             logger.error(f"MangaBuddy get_chapters failed: {e}")
             raise ProviderError(f"Failed to get chapters: {e}")
 
     def get_chapter_images(self, chapter_id: str) -> List[str]:
-        """
-        Get all image URLs for a chapter from MangaBuddy.com using Playwright.
+        """Extract image URLs from the `var chapImages` script variable.
 
-        Args:
-            chapter_id: MangaBuddy chapter ID
-
-        Returns:
-            List of direct image URLs in reading order
+        The chapter page contains a <script> block like:
+            var chapImages = 'url1,url2,url3'
+        We simply fetch the page, regex out that variable, and split.
         """
         logger.debug(f"Fetching MangaBuddy chapter images for: {chapter_id}")
 
         try:
-            # Extract manga_id from chapter_id (format: manga-id/chapter-id)
+            # Build chapter URL
             if '/' in chapter_id:
                 manga_slug = chapter_id.split('/')[0]
                 chapter_slug = chapter_id.split('/')[-1]
@@ -305,101 +326,33 @@ class MangaBuddyProvider(BaseProvider):
 
             logger.debug(f"Chapter URL: {chapter_url}")
 
-            # Use Playwright to handle dynamic image loading
-            image_urls = self._get_chapter_images_with_playwright(chapter_url)
+            response = self.session.get(chapter_url)
+            response.raise_for_status()
 
-            if not image_urls:
-                logger.warning(f"No image URLs found for chapter {chapter_id}")
+            # Extract var chapImages = '...'
+            match = re.search(
+                r"var\s+chapImages\s*=\s*['\"]([^'\"]+)['\"]",
+                response.text,
+            )
+            if not match:
+                logger.warning(f"chapImages not found for {chapter_id}")
                 return []
 
-            logger.info(f"Extracted {len(image_urls)} image URLs from MangaBuddy chapter")
+            raw = match.group(1).strip()
+            image_urls = [
+                url.strip()
+                for url in raw.split(',')
+                if url.strip() and url.strip().startswith('http')
+            ]
+
+            logger.info(
+                f"Extracted {len(image_urls)} image URLs from chapImages"
+            )
             return image_urls
 
         except Exception as e:
             logger.error(f"MangaBuddy get_chapter_images failed: {e}")
             raise ProviderError(f"Failed to get chapter images: {e}")
-
-    def _get_chapter_images_with_playwright(self, chapter_url: str) -> List[str]:
-        """Use Playwright to extract image URLs from dynamically loaded content."""
-        try:
-            from playwright.sync_api import sync_playwright
-
-            with sync_playwright() as p:
-                # Use cloudscraper session for browser context to bypass Cloudflare
-                browser = p.chromium.launch(headless=True)
-
-                # Create context with cloudscraper headers
-                context = browser.new_context(
-                    user_agent=self.get_headers().get('User-Agent', ''),
-                    extra_http_headers=self.get_headers()
-                )
-
-                page = context.new_page()
-
-                # Navigate to chapter page
-                logger.debug(f"Navigating to chapter: {chapter_url}")
-                page.goto(chapter_url, wait_until="domcontentloaded", timeout=30000)
-
-                # Wait for images to load
-                page.wait_for_timeout(5000)  # Wait 3 seconds for dynamic content
-
-                # Extract image URLs using Playwright
-                image_urls = page.evaluate("""
-                    () => {
-                        const images = [];
-                        // Get images from the chapter-images container
-                        const container = document.querySelector('div.container#chapter-images');
-                        if (container) {
-                            const imgElements = container.querySelectorAll('img');
-                            imgElements.forEach(img => {
-                                const src = img.getAttribute('data-src') || img.getAttribute('src');
-                                if (src && src.includes('mbcdns') && (src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png') || src.endsWith('.gif'))) {
-                                    images.push(src);
-                                }
-                            });
-                        }
-                        return images;
-                    }
-                """)
-
-                browser.close()
-
-                # Clean URLs (remove query parameters)
-                clean_urls = []
-                for url in image_urls:
-                    if url:
-                        clean_url = re.sub(r'\?.*$', '', url)
-                        if clean_url:
-                            clean_urls.append(clean_url)
-
-                logger.debug(f"Playwright extracted {len(clean_urls)} image URLs")
-                return clean_urls
-
-        except ImportError:
-            logger.error("Playwright not available for MangaBuddy image extraction")
-            # Fallback to cloudscraper method
-            return self._get_chapter_images_with_cloudscraper(chapter_url)
-        except Exception as e:
-            logger.error(f"Playwright extraction failed: {e}")
-            # Fallback to cloudscraper method
-            return self._get_chapter_images_with_cloudscraper(chapter_url)
-
-    def _get_chapter_images_with_cloudscraper(self, chapter_url: str) -> List[str]:
-        """Fallback method using cloudscraper for image extraction."""
-        try:
-            # Make request with cloudscraper
-            response = self.session.get(chapter_url)
-            response.raise_for_status()
-
-            # Parse HTML
-            soup = self._parse_html(response.text)
-
-            # Extract image URLs
-            return self._extract_image_urls(soup)
-
-        except Exception as e:
-            logger.error(f"Cloudscraper fallback failed: {e}")
-            return []
 
     def _parse_html(self, html: str):
         """Parse HTML content using BeautifulSoup."""

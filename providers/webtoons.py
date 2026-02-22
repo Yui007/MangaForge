@@ -136,116 +136,108 @@ class WebtoonsProvider(BaseProvider):
             raise ProviderError(f"Failed to fetch manga info: {exc}") from exc
 
     def get_chapters(self, manga_id: str) -> List[Chapter]:
-        target_url = self._resolve_manga_url(manga_id=manga_id, url=None)
-        logger.debug("Webtoons get_chapters: manga_id=%s url=%s", manga_id, target_url)
+        """Fetch all chapters via the Webtoons mobile API.
+
+        Tries the originals endpoint first, then falls back to the
+        canvas endpoint.  Both return JSON with all episodes in one
+        request (no pagination needed).
+        """
+        logger.debug("Webtoons get_chapters: manga_id=%s", manga_id)
+
+        title_no = manga_id.strip()
+        api_base = "https://m.webtoons.com/api/v1"
+        endpoints = [
+            f"{api_base}/webtoon/{title_no}/episodes?pageSize=10000",
+            f"{api_base}/canvas/{title_no}/episodes?pageSize=10000",
+        ]
+
+        raw_episodes: List[dict] = []
+        last_error: Optional[Exception] = None
+
+        for api_url in endpoints:
+            try:
+                logger.debug("Trying Webtoons API: %s", api_url)
+                response = self.session.get(api_url)
+                response.raise_for_status()
+                data = response.json()
+
+                if not data.get("success"):
+                    logger.debug("API returned success=false for %s", api_url)
+                    continue
+
+                result = data.get("result", {})
+                raw_episodes = result.get("episodeList", [])
+                if raw_episodes:
+                    logger.info(
+                        "Webtoons API returned %d episodes from %s",
+                        len(raw_episodes),
+                        api_url,
+                    )
+                    break
+            except Exception as exc:
+                last_error = exc
+                logger.debug("Webtoons API %s failed: %s", api_url, exc)
+                continue
+
+        if not raw_episodes:
+            if last_error:
+                raise ProviderError(
+                    f"Failed to fetch chapter list: {last_error}"
+                ) from last_error
+            raise ProviderError(
+                f"No episodes found for title_no={title_no}"
+            )
 
         episodes: List[Chapter] = []
-        seen_episode_numbers: set[int] = set()
-        page = 1
+        for ep in raw_episodes:
+            episode_no = ep.get("episodeNo")
+            if episode_no is None:
+                continue
 
-        try:
-            while True:
-                page_url = self._build_page_url(target_url, page)
+            episode_no_str = str(episode_no)
+            title = self._clean_text(ep.get("episodeTitle", f"Episode {episode_no}"))
+            chapter_number = self._extract_chapter_number(
+                title, episode_no
+            )
 
-                # Add rate limiting to avoid 429 errors
-                import time
-                import random
+            # Build viewer URL from the API's viewerLink
+            viewer_link = ep.get("viewerLink", "")
+            if viewer_link and not viewer_link.startswith("http"):
+                episode_url = f"https://www.webtoons.com{viewer_link}"
+            else:
+                episode_url = viewer_link or ""
 
-                # Progressive delay: increase delay as we go through more pages
-                base_delay = 1.0
-                progressive_delay = base_delay + (page * 0.5)  # Increase delay per page
-                jitter = random.uniform(0.5, 1.5)  # Add randomness to appear more human-like
-                total_delay = progressive_delay * jitter
+            # Convert exposureDateMillis to readable date
+            release_date: Optional[str] = None
+            millis = ep.get("exposureDateMillis")
+            if millis:
+                try:
+                    from datetime import datetime, timezone
+                    dt = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+                    release_date = dt.strftime("%Y-%m-%d")
+                except (ValueError, OSError, OverflowError):
+                    pass
 
-                logger.debug("Waiting %.2fs before requesting page %s", total_delay, page)
-                time.sleep(total_delay)
+            chapter_id = f"{manga_id}:{episode_no_str}"
+            if episode_url:
+                self._chapter_url_cache[chapter_id] = episode_url
 
-                # Make request with retry logic for rate limits
-                max_retries = 3
-                response = None
-                for attempt in range(max_retries):
-                    try:
-                        response = self.session.get(page_url)
-                        response.raise_for_status()
-                        break  # Success, exit retry loop
+            episodes.append(
+                Chapter(
+                    chapter_id=chapter_id,
+                    manga_id=manga_id,
+                    title=title,
+                    chapter_number=chapter_number,
+                    volume=None,
+                    url=episode_url,
+                    release_date=release_date,
+                    language="en",
+                )
+            )
 
-                    except Exception as e:
-                        if "429" in str(e) and attempt < max_retries - 1:
-                            # Rate limited, wait longer and retry
-                            retry_delay = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
-                            logger.warning("Rate limited on page %s, attempt %s. Waiting %ss before retry.", page, attempt + 1, retry_delay)
-                            time.sleep(retry_delay)
-                            continue
-                        else:
-                            raise  # Re-raise if not a rate limit or max retries exceeded
-
-                if response is None:
-                    raise ProviderError("Failed to get response after all retry attempts")
-
-                soup = BeautifulSoup(response.text, "html.parser")
-                episode_items = soup.select("ul#_listUl li._episodeItem")
-                if not episode_items:
-                    break
-
-                new_found = False
-                for item in episode_items:
-                    episode_no_raw = item.get("data-episode-no")
-                    if not episode_no_raw:
-                        continue
-
-                    try:
-                        episode_number = int(episode_no_raw)
-                    except ValueError:
-                        episode_number = None
-
-                    if episode_number is not None and episode_number in seen_episode_numbers:
-                        continue
-
-                    link = item.find("a")
-                    title_el = item.select_one("span.subj span")
-                    date_el = item.select_one("span.date")
-                    chapter_tag = item.select_one("span.tx")
-
-                    if episode_number is not None:
-                        seen_episode_numbers.add(episode_number)
-                    new_found = True
-
-                    title = self._clean_text(title_el.get_text(strip=True)) if title_el else "Episode"
-                    release_date = self._clean_text(date_el.get_text(strip=True)) if date_el else None
-                    chapter_label = chapter_tag.get_text(strip=True) if chapter_tag else str(episode_no_raw)
-                    chapter_number = self._extract_chapter_number(chapter_label, episode_number)
-
-                    episode_url = link.get("href") if link else ""
-                    chapter_id = f"{manga_id}:{episode_no_raw.strip()}"
-                    if episode_url:
-                        self._chapter_url_cache[chapter_id] = episode_url
-
-                    episodes.append(
-                        Chapter(
-                            chapter_id=chapter_id,
-                            manga_id=manga_id,
-                            title=title,
-                            chapter_number=chapter_number,
-                            volume=None,
-                            url=episode_url,
-                            release_date=release_date,
-                            language="en",
-                        )
-                    )
-
-                if not new_found:
-                    break
-                page += 1
-
-            episodes.sort(key=lambda ch: self._extract_sort_key(ch.chapter_id))
-            logger.info("Webtoons get_chapters collected %s chapters", len(episodes))
-            return episodes
-
-        except MangaNotFoundError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Webtoons get_chapters failed: %s", exc)
-            raise ProviderError(f"Failed to fetch chapter list: {exc}") from exc
+        episodes.sort(key=lambda ch: self._extract_sort_key(ch.chapter_id))
+        logger.info("Webtoons get_chapters collected %s chapters", len(episodes))
+        return episodes
 
     def get_chapter_images(self, chapter_id: str) -> List[str]:
         logger.debug("Webtoons get_chapter_images: chapter_id=%s", chapter_id)
@@ -373,20 +365,7 @@ class WebtoonsProvider(BaseProvider):
             return "Ongoing"
         return text or "Unknown"
 
-    @staticmethod
-    def _build_page_url(base_url: str, page: int) -> str:
-        if page <= 1:
-            parsed = urlparse(base_url)
-            params = dict(parse_qsl(parsed.query))
-            params.pop("page", None)
-            new_query = urlencode(params, doseq=True)
-            return urlunparse(parsed._replace(query=new_query))
 
-        parsed = urlparse(base_url)
-        params = dict(parse_qsl(parsed.query))
-        params["page"] = str(page)
-        new_query = urlencode(params, doseq=True)
-        return urlunparse(parsed._replace(query=new_query))
 
     def _extract_chapter_number(self, label: str, fallback: Optional[int]) -> str:
         match = re.search(r"(\d+(?:\.\d+)?)", label)

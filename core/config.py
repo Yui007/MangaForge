@@ -242,6 +242,16 @@ class Config:
         """Get number of retry attempts for failed requests."""
         return self.get('network.retry_attempts', 3)
 
+    @property
+    def preferred_language(self) -> str:
+        """Get preferred chapter language code (e.g. 'en')."""
+        return self.get('providers.preferred_language', 'en')
+
+    @property
+    def preferred_scanlator(self) -> str:
+        """Get preferred scanlation group name (empty = any)."""
+        return self.get('providers.preferred_scanlator', '')
+
     def get_rate_limit(self, provider_id: str) -> float:
         """
         Get rate limit for a specific provider.

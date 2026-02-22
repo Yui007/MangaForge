@@ -44,6 +44,9 @@
 | **Toonily** 🟢 | ✅ **Fully Working** | SFW/NSFW webtoon and Manhwa hosting |
 | **KaliScan** 🟢 | ✅ **Fully Working** | High-quality manga hosting with modern interface |
 | **ManhuaScan** 🟢 | ✅ **Fully Working** | Rich manhua Library hosting |
+| **Comix** 🟢 | ✅ **Fully Working** | API-based manga reader with scanlator groups |
+| **MangaBall** 🟢 | ✅ **Fully Working** | Multi-language manga hosting |
+| **WeebDex** 🟢 | ✅ **Fully Working** | API-based manga reader with high-quality images |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -80,7 +83,7 @@ python main.py
 
 ### 3. **Search & Download**
 1. **Search**: Choose "[1] 🔍 Search Manga by Title"
-2. **Select Provider**: Pick from 11 available sources
+2. **Select Provider**: Pick from 12 available sources
 3. **Browse Results**: Navigate paginated results
 4. **Download**: Select chapters and format (CBZ/PDF/Images)
 
@@ -94,7 +97,7 @@ python main.py
 python main.py
 
 # Select: [1] Search Manga by Title
-# Choose provider: Bato, WeebCentral, etc.
+# Choose provider: WeebCentral, MangaBall, etc.
 # Enter: "attack on titan"
 # Browse results and select manga
 ```
@@ -113,6 +116,7 @@ python main.py
 # - Download directory
 # - Parallel workers
 # - Output format (CBZ/PDF/Images)
+# - Preferred language & scanlator
 # - Network timeout
 ```
 
@@ -139,7 +143,10 @@ MangaForge/
 │   ├── vymanga.py      # VyManga ✅
 │   ├── toonily.py      # Toonily ✅
 │   ├── kaliscan.py     # KaliScan ✅
-│   └── manhuascan.py   # ManhuaScan ✅
+│   ├── manhuascan.py   # ManhuaScan ✅
+│   ├── comix.py        # Comix ✅
+│   ├── mangaball.py    # MangaBall ✅
+│   └── weebdex.py      # WeebDex ✅
 ├── 🎨 cli/              # Beautiful interface
 ├── ⚙️ config/           # Settings
 └── 📥 downloads/        # Downloaded manga
@@ -164,6 +171,47 @@ MangaForge/
 - **📄 PDF**: Portable document format
 - **🖼️ Images**: Individual image files
 - **🎯 Quality Control**: Configurable image processing
+
+### 🌐 Language & Scanlator Filtering
+
+Some providers (MangaBall, WeebDex, Comix) host chapters in multiple languages or from different scanlation groups. You can set your preferences in `config/settings.yaml`:
+
+```yaml
+providers:
+  preferred_language: en          # ISO language code (en, es, fr, pt-br, id, ko, ja, zh, etc.)
+  preferred_scanlator: ''         # Scanlation group name (empty = accept any)
+```
+
+- **`preferred_language`**: Filters chapters by language. Set to `en` for English (default). Leave empty to show all languages.
+- **`preferred_scanlator`**: When multiple groups translate the same chapter, picks the one matching this name. Leave empty to accept any group.
+
+You can also change these at runtime via **Settings → [7] Change Preferred Language** or **[8] Change Preferred Scanlator** in the CLI.
+
+### 🔥 FlareSolverr (Required for MangaKakalot)
+
+The **MangaKakalot** provider uses [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) to bypass Cloudflare protection. You must have it running before using these providers.
+
+**Setup:**
+
+1. Download the latest release for your platform from:  
+   👉 **[FlareSolverr Releases](https://github.com/FlareSolverr/FlareSolverr/releases)**
+
+2. Run it:
+   ```bash
+   # Windows: extract and run the .exe
+   ./FlareSolverr.exe
+
+   # Linux: extract and run the binary
+   chmod +x ./FlareSolverr
+   ./FlareSolverr
+
+   # Docker (alternative)
+   docker run -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest
+   ```
+
+3. FlareSolverr defaults to `http://localhost:8191` — MangaForge will connect to it automatically.
+
+> ⚠️ **Without FlareSolverr running**, MangaKakalot will fail with connection errors.
 
 ---
 
@@ -220,7 +268,7 @@ python test.py
 
 - **Python**: 3.10 or higher
 - **Dependencies**: See `requirements.txt`
-- **Optional**: Playwright browsers for some providers
+- **FlareSolverr**: Required for MangaKakalot (see [setup above](#-flaresolverr-required-for-mangakakalot))
 
 ### Virtual Environment Setup
 
@@ -249,7 +297,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 9 active (growing) 📈 | 10+ |
+| **Providers** | 12 active (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

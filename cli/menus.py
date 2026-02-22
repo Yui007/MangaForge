@@ -260,9 +260,11 @@ def show_settings_menu(config: 'Config') -> None:
         console.print("[4] Change Default Format")
         console.print("[5] Toggle Delete Images")
         console.print("[6] Change Image Quality")
+        console.print("[7] Change Preferred Language")
+        console.print("[8] Change Preferred Scanlator")
         console.print("[0] Back to Main Menu")
 
-        choice = Prompt.ask("\nSelect option", choices=["0", "1", "2", "3", "4", "5", "6"])
+        choice = Prompt.ask("\nSelect option", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8"])
 
         if choice == "0":
             break
@@ -278,6 +280,10 @@ def show_settings_menu(config: 'Config') -> None:
             toggle_delete_images(config)
         elif choice == "6":
             change_image_quality(config)
+        elif choice == "7":
+            change_preferred_language(config)
+        elif choice == "8":
+            change_preferred_scanlator(config)
         else:
             console.print("[red]Invalid choice.[/red]")
 
@@ -396,6 +402,69 @@ def change_image_quality(config: 'Config') -> None:
                 console.print("[red]Quality must be between 1 and 100.[/red]")
         except ValueError:
             console.print("[red]Please enter a valid number.[/red]")
+
+
+def change_preferred_language(config: 'Config') -> None:
+    """Change the preferred chapter language."""
+    current = config.preferred_language
+    console.print(f"\n[bold]Current preferred language:[/bold] {current.upper()}")
+
+    console.print("\n[bold]Common language codes:[/bold]")
+    lang_table = Table(show_header=False, show_edge=False, pad_edge=False)
+    lang_table.add_column("Code", style="cyan", width=8)
+    lang_table.add_column("Language", style="white", width=20)
+
+    languages = [
+        ("en", "English"),
+        ("es", "Spanish"),
+        ("fr", "French"),
+        ("pt-br", "Portuguese (BR)"),
+        ("id", "Indonesian"),
+        ("ko", "Korean"),
+        ("ja", "Japanese"),
+        ("zh", "Chinese"),
+        ("ar", "Arabic"),
+        ("de", "German"),
+    ]
+    for code, name in languages:
+        marker = " ✓" if code == current else ""
+        lang_table.add_row(code, f"{name}{marker}")
+
+    console.print(lang_table)
+    console.print("\n[dim]Enter any ISO language code (e.g. en, es, fr, pt-br)[/dim]")
+
+    new_lang = Prompt.ask("Enter language code", default=current).strip().lower()
+    if new_lang and new_lang != current:
+        config.set('providers.preferred_language', new_lang)
+        config.save()
+        console.print(f"[green]✓ Preferred language changed to: {new_lang.upper()}[/green]")
+    else:
+        console.print("[yellow]Language unchanged.[/yellow]")
+
+
+def change_preferred_scanlator(config: 'Config') -> None:
+    """Change the preferred scanlation group."""
+    current = config.preferred_scanlator
+    console.print(
+        f"\n[bold]Current preferred scanlator:[/bold] "
+        f"{current if current else '(any — no preference)'}"
+    )
+    console.print("[dim]Leave empty to accept any scanlation group[/dim]")
+
+    new_group = Prompt.ask(
+        "Enter scanlator name",
+        default=current if current else "",
+    ).strip()
+
+    if new_group != current:
+        config.set('providers.preferred_scanlator', new_group)
+        config.save()
+        if new_group:
+            console.print(f"[green]✓ Preferred scanlator set to: {new_group}[/green]")
+        else:
+            console.print("[green]✓ Preferred scanlator cleared (any group)[/green]")
+    else:
+        console.print("[yellow]Scanlator unchanged.[/yellow]")
 
 
 def confirm_download(chapters: List['Chapter'], format_type: str) -> bool:

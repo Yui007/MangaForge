@@ -109,43 +109,56 @@ def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int,
     Returns:
         User selection (N, P, A, R, S, Q)
     """
+    import re
+
     # Calculate pagination
     start_idx = (page - 1) * chapters_per_page
     end_idx = min(start_idx + chapters_per_page, len(chapters))
-    page_chapters = chapters[start_idx:end_idx]
 
     # Create chapters table
     table = Table(title=f"Chapters - Page {page}/{total_pages}", show_header=True, header_style="bold magenta")
     table.add_column("#", style="cyan", width=4, justify="center")
-    table.add_column("Chapter", style="white", width=35, max_width=35)
-    table.add_column("Volume", style="green", width=8, justify="center")
-    table.add_column("Date", style="yellow", width=12, justify="center")
+    table.add_column("Chapter", style="white", width=22, max_width=22)
+    table.add_column("Vol", style="green", width=5, justify="center")
+    table.add_column("Lang", style="yellow", width=5, justify="center")
+    table.add_column("Scanlator", style="magenta", width=18, max_width=18)
+    table.add_column("Date", style="dim", width=11, justify="center")
 
     for i in range(start_idx, end_idx):
         chapter = chapters[i]
 
+        # Extract scanlator from title bracket notation [GroupName]
+        title_text = chapter.title
+        scanlator = "-"
+        bracket_match = re.search(r'\[([^\]]+)\]\s*$', title_text)
+        if bracket_match:
+            scanlator = bracket_match.group(1)
+            title_text = title_text[:bracket_match.start()].strip()
+            if len(scanlator) > 16:
+                scanlator = scanlator[:14] + ".."
+
         # Format chapter display
-        chapter_display = chapter.title
-        if len(chapter_display) > 32:
-            chapter_display = chapter_display[:29] + "..."
+        if len(title_text) > 20:
+            title_text = title_text[:18] + ".."
 
         # Format volume
         volume_display = chapter.volume if chapter.volume else "-"
 
+        # Language
+        lang_display = chapter.language.upper() if hasattr(chapter, 'language') and chapter.language else "-"
+
         # Format date
         if chapter.release_date:
-            # Truncate long dates to fit the column width
-            if len(chapter.release_date) > 12:
-                date_display = chapter.release_date[:9] + "..."
-            else:
-                date_display = chapter.release_date
+            date_display = chapter.release_date[:10]
         else:
-            date_display = "Unknown"
+            date_display = "-"
 
         table.add_row(
             str(i + 1),
-            chapter_display,
+            title_text,
             volume_display,
+            lang_display,
+            scanlator,
             date_display
         )
 
@@ -266,6 +279,16 @@ def display_settings_table(config: 'Config') -> None:
         "Image Quality",
         f"{config.get('output.image_quality')}%",
         "JPEG quality for PDF conversion"
+    )
+    table.add_row(
+        "Preferred Language",
+        config.preferred_language.upper(),
+        "Chapter language filter (e.g. EN)"
+    )
+    table.add_row(
+        "Preferred Scanlator",
+        config.preferred_scanlator or "(any)",
+        "Preferred scanlation group"
     )
 
     # Display table in a panel

@@ -20,10 +20,7 @@ output:
   image_quality: 100
 providers:
   enabled:
-  - mock
-  - bato
   - weebcentral
-  - mangapark
   - mangabuddy
   - asuracomic
   - webtoons
@@ -32,6 +29,11 @@ providers:
   - vymanga
   - kaliscan
   - manhuascan
+  - comix
+  - mangaball
+  - weebdex
+  preferred_language: 
+  preferred_scanlator: ''
   rate_limits:
     default: 1.0
     mock: 0.1

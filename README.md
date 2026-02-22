@@ -47,6 +47,9 @@
 | **Comix** 🟢 | ✅ **Fully Working** | API-based manga reader with scanlator groups |
 | **MangaBall** 🟢 | ✅ **Fully Working** | Multi-language manga hosting |
 | **WeebDex** 🟢 | ✅ **Fully Working** | API-based manga reader with high-quality images |
+| **MangaPill** 🟢 | ✅ **Fully Working** | Large manga library with clean static HTML |
+| **KunManga** 🟢 | ✅ **Fully Working** | Manhwa & manga hosting (requires FlareSolverr) |
+| **HarmonyScan** 🟢 | ✅ **Fully Working** | French scanlation site (WordPress Madara) |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -83,7 +86,7 @@ python main.py
 
 ### 3. **Search & Download**
 1. **Search**: Choose "[1] 🔍 Search Manga by Title"
-2. **Select Provider**: Pick from 12 available sources
+2. **Select Provider**: Pick from 15 available sources
 3. **Browse Results**: Navigate paginated results
 4. **Download**: Select chapters and format (CBZ/PDF/Images)
 
@@ -297,7 +300,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 12 active (growing) 📈 | 10+ |
+| **Providers** | 15 active (growing) 📈 | 15+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

@@ -32,6 +32,9 @@ providers:
   - comix
   - mangaball
   - weebdex
+  - mangapill
+  - kunmanga
+  - harmonyscan
   preferred_language: 
   preferred_scanlator: ''
   rate_limits:

@@ -25,5 +25,6 @@ playwright  # Modern browser automation (required for MangaPark)
 
 # Cloudflare bypass for protected sites
 cloudscraper  # Cloudflare protection bypass (required for MangaBuddy)
+ai-cloudscraper
 curl-cffi     # Cloudflare bypass via TLS fingerprinting (required for MangaKakalot)
 requests      # FlareSolverr communication (required for MangaKakalot)

@@ -50,6 +50,11 @@
 | **MangaPill** 🟢 | ✅ **Fully Working** | Large manga library with clean static HTML |
 | **KunManga** 🟢 | ✅ **Fully Working** | Manhwa & manga hosting (requires FlareSolverr) |
 | **HarmonyScan** 🟢 | ✅ **Fully Working** | French scanlation site (WordPress Madara) |
+| **MangaCloud** 🟢 | ✅ **Fully Working** | High-performance manga aggregator |
+| **MangaFire** 🟢 | ✅ **Fully Working** | Large library with high quality chapters |
+| **MangaKatana** 🟢 | ✅ **Fully Working** | Fast chapter fetching library |
+| **MangaTaro** 🟢 | ✅ **Fully Working** | Clean manga reading source |
+| **Atsu** 🟢 | ✅ **Fully Working** | Multi-scanlator aggregation API |
 
 > **🟢 Fully Tested** | **🟡 Basic Testing** | **⚪ In Development**
 >
@@ -86,7 +91,7 @@ python main.py
 
 ### 3. **Search & Download**
 1. **Search**: Choose "[1] 🔍 Search Manga by Title"
-2. **Select Provider**: Pick from 15 available sources
+2. **Select Provider**: Pick from 20 available sources
 3. **Browse Results**: Navigate paginated results
 4. **Download**: Select chapters and format (CBZ/PDF/Images)
 
@@ -149,7 +154,12 @@ MangaForge/
 │   ├── manhuascan.py   # ManhuaScan ✅
 │   ├── comix.py        # Comix ✅
 │   ├── mangaball.py    # MangaBall ✅
-│   └── weebdex.py      # WeebDex ✅
+│   ├── weebdex.py      # WeebDex ✅
+│   ├── mangacloud.py   # MangaCloud ✅
+│   ├── mangafire.py    # MangaFire ✅
+│   ├── mangakatana.py  # MangaKatana ✅
+│   ├── mangataro.py    # MangaTaro ✅
+│   └── atsu.py         # Atsu ✅
 ├── 🎨 cli/              # Beautiful interface
 ├── ⚙️ config/           # Settings
 └── 📥 downloads/        # Downloaded manga
@@ -300,7 +310,7 @@ deactivate
 |:---:|:---:|:---:|
 | **Language** | Python 🐍 | Go 🏃 |
 | **Interface** | Rich CLI 🎨 | TUI |
-| **Providers** | 15 active (growing) 📈 | 15+ |
+| **Providers** | 20 active (growing) 📈 | 10+ |
 | **Architecture** | Plugin-based 🔌 | Built-in |
 | **Customization** | YAML config ⚙️ | CLI flags |
 | **Output Formats** | CBZ, PDF, Images 📦 | CBZ only |

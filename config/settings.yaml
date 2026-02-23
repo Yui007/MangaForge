@@ -35,6 +35,11 @@ providers:
   - mangapill
   - kunmanga
   - harmonyscan
+  - mangacloud
+  - mangafire
+  - mangakatana
+  - mangataro
+  - atsu
   preferred_language: 
   preferred_scanlator: ''
   rate_limits:

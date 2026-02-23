@@ -128,7 +128,7 @@ def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int,
         chapter = chapters[i]
 
         # Extract scanlator from title bracket notation [GroupName]
-        title_text = chapter.title
+        title_text = chapter.title.strip() if chapter.title else ""
         scanlator = "-"
         bracket_match = re.search(r'\[([^\]]+)\]\s*$', title_text)
         if bracket_match:
@@ -136,6 +136,10 @@ def display_chapters_table(chapters: List[Chapter], page: int, total_pages: int,
             title_text = title_text[:bracket_match.start()].strip()
             if len(scanlator) > 16:
                 scanlator = scanlator[:14] + ".."
+
+        # If title is empty, fallback to Chapter Number for visual purposes
+        if not title_text:
+            title_text = f"Chapter {chapter.chapter_number}"
 
         # Format chapter display
         if len(title_text) > 20:

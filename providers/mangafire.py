@@ -10,6 +10,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from core.base_provider import BaseProvider, ProviderError
+from core.config import Config
 from models import MangaSearchResult, MangaInfo, Chapter
 
 try:
@@ -26,6 +27,7 @@ class MangaFireProvider(BaseProvider):
     base_url = "https://mangafire.to"
 
     def __init__(self):
+        self.config = Config()
         super().__init__()
         self._playwright = None
         self._browser = None
@@ -207,7 +209,13 @@ class MangaFireProvider(BaseProvider):
     def get_chapters(self, manga_id: str) -> List[Chapter]:
         slug = manga_id.lstrip("/manga/")
         numeric_id = slug.split(".")[-1]
-        url = f"{self.base_url}/ajax/manga/{numeric_id}/chapter/en"
+        
+        pref_lang = self.config.get("providers.preferred_language", "en")
+        if not pref_lang:
+            pref_lang = "en"
+        pref_lang = pref_lang.lower()
+            
+        url = f"{self.base_url}/ajax/manga/{numeric_id}/chapter/{pref_lang}"
 
         resp = self.session.get(url)
         resp.raise_for_status()

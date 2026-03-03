@@ -138,7 +138,9 @@ class Config:
         for key, value in user_config.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self._merge_configs(result[key], value)
-            else:
+            elif value is not None:
+                # Skip None values from user config so defaults are preserved
+                # (YAML parses blank values like 'key: ' as None)
                 result[key] = value
 
         return result
@@ -220,7 +222,7 @@ class Config:
     @property
     def default_format(self) -> str:
         """Get default output format."""
-        return self.get('output.default_format', 'cbz')
+        return self.get('output.default_format', 'cbz') or 'cbz'
 
     @property
     def delete_images_after(self) -> bool:
@@ -245,12 +247,12 @@ class Config:
     @property
     def preferred_language(self) -> str:
         """Get preferred chapter language code (e.g. 'en')."""
-        return self.get('providers.preferred_language', 'en')
+        return self.get('providers.preferred_language', 'en') or 'en'
 
     @property
     def preferred_scanlator(self) -> str:
         """Get preferred scanlation group name (empty = any)."""
-        return self.get('providers.preferred_scanlator', '')
+        return self.get('providers.preferred_scanlator', '') or ''
 
     def get_rate_limit(self, provider_id: str) -> float:
         """
